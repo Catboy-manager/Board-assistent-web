@@ -1,0 +1,12 @@
+config.json
+ssl/
+data/
+uploads/
+server.log
+*.log
+node_modules/
+stt/whisper-tiny/
+stt/model-ru.zip
+*.onnx
+*.onnx.json
+tts/

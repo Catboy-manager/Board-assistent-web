@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Kanban Board — настройка голоса</title>
+<style>
+  body{font-family:system-ui,sans-serif;background:#1e2a3a;color:#eef;margin:0;padding:20px;line-height:1.5}
+  .wrap{max-width:720px;margin:0 auto}
+  h1{font-size:22px} h2{font-size:17px;margin-top:26px;border-bottom:1px solid #38475a;padding-bottom:6px}
+  code{background:#2b3a4e;padding:2px 6px;border-radius:4px;font-size:90%}
+  .step{background:#253348;border-radius:8px;padding:12px 14px;margin:10px 0}
+  a.btn{display:inline-block;background:#f5b7b1;color:#3a2530;padding:10px 16px;border-radius:8px;text-decoration:none;font-weight:600;margin:4px 0}
+  .check{background:#253348;border-radius:8px;padding:14px 16px;margin:14px 0;text-align:center}
+  #ck-result{font-size:15px;font-weight:600;margin-top:8px}
+  .ok{color:#3fb950}.bad{color:#f85149}.pend{color:#9aa7b8}
+  .warn{background:#5a4630;border-left:4px solid #f9a825;padding:10px 14px;border-radius:6px}
+  .small{font-size:12px;color:#9aa7b8}
+</style>
+</head>
+<body><div class="wrap">
+
+<h1>📋 Kanban Board — включение голоса со второго ПК / телефона</h1>
+<p>Браузер блокирует микрофон на сайтах, которым не доверяет (без безопасного соединения). Для голосовых команд
+нужно один раз установить наш корневой сертификат. Здесь можно проверить, принят ли он.</p>
+
+<div class="check">
+  <div id="ck-status">Проверка соединения…</div>
+  <div id="ck-result" class="pend"></div>
+  <div id="ck-actions"></div>
+</div>
+
+<h2>Как проверилось (что означают цвета)</h2>
+<div class="step">
+<span class="ok">● Зелёный</span> — сертификат установлен правильно. Нажмите кнопку «Войти» (появится выше),
+откройте сайт по защищённому адресу и разрешите микрофон: голосовой ввод заработает.<br>
+<span class="bad">● Красный</span> — браузер всё ещё не доверяет сертификату. Причины и исправление ниже.
+</div>
+
+<h2>Скачать сертификат заново</h2>
+<a class="btn" href="/ca.pem">⬇️ Скачать сертификат kanban-ca.pem</a>
+<p class="small">Это тот же файл и по адресу: <code>http://192.168.1.100:8080/ca.pem</code></p>
+
+<h2>Установка (важно: после установки полностью перезапустите браузер)</h2>
+
+<h2>Windows (Chrome / Edge)</h2>
+<div class="step">
+1. Скачайте <code>ca.pem</code> и <b>переименуйте в <code>kanban-ca.crt</code></b> (двойной клик по .pem часто просто открывает блокнот — обязательно смените расширение).<br>
+2. <b>Правый клик</b> по файлу → <b>Установить сертификат</b> → «Текущий пользователь» → далее.<br>
+3. Выберите <b>«Поместить все сертификаты в хранилище»</b> → <b>Обзор</b> → <b>Доверенные корневые центры сертификации</b> → ОК → Далее → Готово.<br>
+4. <span class="warn">Важно: закройте Chrome/Edge <b>полностью</b> (все окна, через «Выход») и откройте заново.</span>
+</div>
+
+<h2>macOS (Safari / Chrome)</h2>
+<div class="step">1. Дважды кликните <code>ca.pem</code> — откроется «Связка ключей».<br>
+2. Дважды кликните сертификат → раскройте <b>«Доверие»</b> → <b>«Всегда доверять»</b> → закройте окно (введите пароль).<br>
+3. Перезапустите браузер полностью.</div>
+
+<h2>Android (Chrome)</h2>
+<div class="step">1. Скачайте <code>ca.pem</code> (кнопка выше).<br>
+2. Настройки → Безопасность → <b>Шифрование и учётные данные</b> → <b>Установить сертификат</b> → <b>Сертификат ЦС</b> → выберите файл.<br>
+3. Android 14+ может показать чёрный экран — перейдите в «Настройки» → «Сертификаты пользователя» и установите оттуда.<br>
+4. Перезапустите Chrome (закройте из списка приложений).</div>
+
+<h2>iPhone / iPad (Safari)</h2>
+<div class="step">1. Откройте <code>http://192.168.1.100:8080/ca.pem</code> → скачайте.<br>
+2. Настройки → <b>Профиль загружен</b> → Установить; затем Настройки → <b>Основные</b> → <b>Об этом устройстве</b> → <b>Настройки доверия сертификатам</b> → включите доверие.<br>
+3. Перезапустите Safari.</div>
+
+<h2>Linux (свой ПК)</h2>
+<div class="step"><code>sudo cp ca.pem /usr/local/share/ca-certificates/kanban-board.crt<br>
+sudo update-ca-certificates</code><br>Перезапустите браузер.</div>
+
+<h2>Если используется Firefox</h2>
+<div class="step">Firefox не использует системное хранилище: проще всего пользоваться <b>Chrome / Edge / Chromium</b>.
+Либо в Firefox: Настройки → Приватность и защита → Сертификаты → «Просмотр» → вкладка «Центры сертификации» →
+«Импортировать» → выбрать <code>ca.pem</code> → отметить «Доверять при изучении сайтов» → ОК → перезапуск Firefox.</div>
+
+<div class="warn">Если после всех шагов проверка выше всё ещё красная — сообщите, какая ОС и браузер на втором ПК,
+и что именно показывает проверка (или скопируйте отсюда ссылку вида <code>https://IP:8443</code>).</div>
+
+<p><a href="/">← На доску</a></p>
+
+<script>
+(function () {
+  var host = location.hostname;
+  var probe = 'https://' + host + ':8443/api/ping';
+  var status = document.getElementById('ck-status');
+  var result = document.getElementById('ck-result');
+  var actions = document.getElementById('ck-actions');
+  var done = false;
+  function show(ok) {
+    if (done) return; done = true;
+    if (ok) {
+      status.textContent = 'Результат:';
+      result.textContent = '✅ Сертификат принят — всё готово к голосу';
+      result.className = 'ok';
+      actions.innerHTML = '<a class="btn" href="' + probe.replace('/api/ping', '/') + '">➡️ Войти на защищённый адрес</a>';
+    } else {
+      status.textContent = 'Результат:';
+      result.textContent = '❌ Сертификат не принят';
+      result.className = 'bad';
+      actions.innerHTML = '<div class="small" style="margin-top:6px">Установите сертификат (ниже) и проверьте ещё раз после полного перезапуска браузера.</div>';
+    }
+  }
+  setTimeout(function(){ show(false); }, 5000);
+  fetch(probe, { mode: 'no-cors', cache: 'no-store' })
+    .then(function(){ show(true); })
+    .catch(function(){ show(false); });
+})();
+</script>
+</div></body></html>

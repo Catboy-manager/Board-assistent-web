@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="mobile-web-app-capable" content="yes">
+  <title>Kanban Board</title>
+  <script>
+  if (location.protocol === 'https:' && !window.isSecureContext) {
+    location.replace('http://' + location.hostname + ':8080/setup');
+  }
+  </script>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <div id="bg" aria-hidden="true"></div>
+
+  <header id="topbar">
+    <div class="brand">
+      <span class="logo">📋</span>
+      <div class="brand-text">
+        <h1>Kanban Board</h1>
+        <div id="clock"></div>
+      </div>
+    </div>
+
+    <div id="weather" class="weather">
+      <div class="we-now">
+        <span id="w-ico">⛅</span>
+        <span id="w-temp">–</span>
+        <span class="w-desc" id="w-desc"></span>
+      </div>
+      <div class="we-tomorrow" id="w-tomorrow" title="Прогноз на завтра"></div>
+    </div>
+
+    <div class="top-actions">
+      <button id="btn-wake" class="icon-btn" title="Всегда слушать: «Саша» / «Саня» / «Александр»">🎤<span id="wake-ind" class="wake-ind"></span></button>
+      <button id="btn-events" class="icon-btn" title="События и уведомления">🔔<span id="events-badge" class="badge hidden"></span></button>
+      <button id="btn-settings" class="icon-btn" title="Настройки">⚙️</button>
+      <button id="btn-files" class="icon-btn" title="Файлы на этом ПК">📁</button>
+    </div>
+  </header>
+
+  <main id="board" aria-label="Канбан-доска">
+    <div id="board-inner"></div>
+    <button id="btn-add-column" class="add-column">+ Колонка</button>
+  </main>
+
+  <div id="event-toasts" class="toasts"></div>
+
+  <div id="overlay" class="overlay hidden"></div>
+
+  <aside id="events-panel" class="drawer hidden" aria-label="События">
+    <div class="drawer-head">
+      <h2>🔔 События</h2>
+      <button class="icon-btn close-btn" data-close="events">✕</button>
+    </div>
+    <button id="btn-add-event" class="primary block">+ Новое событие</button>
+    <div id="events-list" class="events-list"></div>
+  </aside>
+
+  <aside id="ai-panel" class="ai-panel hidden" aria-label="ИИ-ассистент">
+    <div class="drawer-head">
+      <h2>🤖 Big Pickle <span class="model-tag" id="ai-model-tag"></span></h2>
+      <button class="icon-btn close-btn" data-close="ai">✕</button>
+    </div>
+    <div id="ai-messages" class="ai-messages"></div>
+    <div id="ai-trace" class="ai-trace"></div>
+    <div class="ai-inputbar">
+      <div id="ai-preview" class="ai-preview hidden"></div>
+      <div class="ai-controls">
+        <button id="btn-ai-photo" class="icon-btn" title="Прикрепить фото">🖼️</button>
+        <input type="file" id="ai-photo-input" accept="image/*" hidden>
+        <button id="btn-ai-mic" class="icon-btn" title="Голосовой ввод">🎙️</button>
+        <input id="ai-text" class="ai-text" type="text" placeholder="Спроси что-нибудь…" autocomplete="off">
+        <button id="btn-ai-send" class="icon-btn send" title="Отправить">➤</button>
+      </div>
+      <div id="ai-voice-status" class="ai-voice-status hidden">🎙️ Говорите…</div>
+    </div>
+  </aside>
+
+  <aside id="files-panel" class="drawer hidden" aria-label="Файлы">
+    <div class="drawer-head">
+      <h2>📁 Файлы на этом ПК</h2>
+      <button class="icon-btn close-btn" data-close="files">✕</button>
+    </div>
+    <div id="files-breadcrumb" class="files-crumb"></div>
+    <div id="files-list" class="files-list"></div>
+  </aside>
+
+  <button id="btn-ai-toggle" class="ai-toggle" title="ИИ-ассистент">🤖</button>
+
+  <div id="ai-resizer" title="Перетащите, чтобы сменить ширину"></div>
+
+  <div id="modal" class="modal hidden"></div>
+
+  <script src="/js/app.js"></script>
+  <script src="/js/trace.js"></script>
+  <script src="/js/weather.js"></script>
+  <script src="/js/assistant.js"></script>
+  <script src="/js/assist.js"></script>
+  <script src="/js/notif.js"></script>
+  <script src="/js/wake.js"></script>
+  <script src="/js/files.js"></script>
+</body>
+</html>
