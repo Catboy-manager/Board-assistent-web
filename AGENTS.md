@@ -1,0 +1,68 @@
+# AGENTS.md — шпаргалка для opencode по этому проекту
+
+Проект — персональная канбан-доска + ИИ-ассистент + новостная лента + «что посмотреть», хостится на ПК пользователя.
+
+## Схема проекта (3 репозитория)
+
+| Репозиторий | Каталог | Что это |
+|---|---|---|
+| `Board-assistent-web` | `~/kanban-board` | Web-сервер, основной рабочий код |
+| `Board-assistent-linux` | `~/kanban-desktop/linux` | Electron-обёртка для Linux (сборка AppImage) |
+| `Board-assistent-windows` | `~/kanban-desktop/windows` | Electron-обёртка для Windows (вложенная папка `app/app/`) |
+
+**Паттерн синхронизации десктопов.** Web — источник истины. Код веб-версии забрасывается в desktop-копии, но с переделкой `server.js` на настольный режим:
+
+- `DATA_DIR` = `process.env.KANBAN_DATA_DIR || path.join(os.homedir(), '.kanban-desktop')` (в вебе — `path.join(ROOT,'data')`)
+- `CONFIG_FILE` — путь к конфигу в домашней директории пользователя (в вебе — `config.json` рядом со `server.js`). Дефолт: `let config = { ai: {} };`
+- `UPLOAD_DIR` — под `DATA_DIR`
+- `host` = `process.env.KANBAN_HOST || '127.0.0.1'`; `port` = `process.env.KANBAN_PORT || PORT || config.port || 8080`
+- `fs.mkdirSync(DATA_DIR)` перед первым `saveDb()`
+
+При любой правке общего веб-кода синхронизировать в `linux/app/` и `windows/app/app/`: `server.js`, `movies.js`, `news.js`, `assist.js`, `assist-cli.js`, `ai-opencode.json`, `stt/stt.py`, `public/*` (включая `public/js/movies.js` и `public/js/news.js`), `telegram-bot.js`; затем пересобрать AppImage.
+
+## Ключевые команды и сервис
+
+- Web-служба: `systemd`, юнит `kanban-board` (`sudo systemctl restart kanban-board`). Порт 8080 (HTTP) / 8443 (HTTPS), LAN `192.168.1.100`.
+- Локальный путь к ИИ-модели: `opencode run -m opencode/big-pickle --format json` через `runOpencode()` в `server.js` (конфиг `ai-opencode.json`).
+- Desktop-тест без GUI: `cd linux && PORT=8124 KANBAN_DATA_DIR=/tmp/opencode/ai-dtest node app/server.js`.
+- Cardify: `boardCli()` спавнит `assist-cli.js --db …`; после каждого вызова `db` заново читается с диска.
+- Сборка AppImage: в `linux/` через `npm run dist` (electron-builder, бинарник в `dist/`).
+
+## Существующий API
+
+- `/api/data` GET/PUT — доска (db.json), `/api/weather`, `/api/ping`, `/api/upload`, `/api/stt`, `/api/ai/chat`, `/api/ai/voice`, `/api/config`, `/api/files`, `/api/file`
+- `/api/movies` GET/POST(добавить) · `/api/movies/:id/toggle|delete|resolve` · `/api/movies/resolve` (пакетный подбор постеров)
+- `/api/news?period=today|yesterday` · `/api/news/rate {id,rating}` (-2..2)
+
+## Прогресс реализации (checklist)
+
+- [x] Веб + desktop (Electron, AppImage) — доска, колонки, карточки, drag&drop, события, напоминания, файлы проекта
+- [x] ИИ-ассистент (opencode CLI bridge), текстовый/голосовой (STT faster-whisper + браузер), TTS piper (ru_RU-irina-medium), wake-слова
+- [x] Cardify — занос контента в карточки/память по JSON-правилу `CARDIFY_RULE`
+- [x] Telegram-мост (`telegram-bot.js`)
+- [x] Git: три приватных репозитория, секреты в `.gitignore`
+- [x] **Этап «Вечер»:** бокс снизу слева — вкладка 🎬 «Фильмы» (список, постеры из интернета, постера в модалке, кнопки Кинопоиск/ВК Видео/поиск, отметить просмотренным, удалить)
+- [x] **Этап «Новости»:** вкладка 🗞 — сводка за сегодня/вчера (RSS: Лента, РИА, ТАСС, Коммерсантъ, Хабр, NASA), оценки интереса (😞-2 … 🤩+2), пер-категорийные веса выборки, ✨ ИИ-сводка
+- [ ] БД/индексы новостей: тюнинг ключевых слов под реальные источники
+- [x] Авто-подтяжка постеров: фоновая `prime()` — по одному фильму раз в 6 с, порядок `Без постера → не просмотренные → старые`; при добавлении — постановка в очередь сразу
+
+## Оптимизации и заметки
+
+- `server.js` — монолит; модули `movies.js`/`news.js` вынесены — держать новые фичи в модулях, а не в server.js.
+- Не хранить тяжёлое в git: `config.json` (секреты), `data/`, `ssl/`, `uploads/`, `stt/whisper-tiny/`, `*.onnx`, `dist/`, `node_modules/`.
+- Telegram API недоступен с этого хоста (RU DPI): работает только через `HTTPS_PROXY`/`ALL_PROXY` (CONNECT) или зеркало `TELEGRAM_API_BASE`.
+- Постеры: основной источник — Bing Images (`murl` из HTML); фолбэк — ИИ-резолвер через opencode (websearch). Yandex.Images отдаёт пустые результаты боту.
+- Новости: RIA/ТАСС/Хабр/NASA отвечают 200; Лента/Ъ — редирект (fetch `redirect:'follow'`); space.com кормит `/feeds/all`. Категории: ключевые слова (`политика/техника/игры/космос/авто/прочее`), авто по умолчанию не показывается (пользователь не интересуется).
+- Секреты (GitHub PAT, Telegram-токен) НЕ помещать в файлы и не логировать.
+
+## Системные требования для запуска
+
+- Web: Node.js ≥ 18 (глобальный fetch), Python 3 + faster-whisper + torch (STT), piper TTS-модель (data/tts). ОС: Linux. Дефолт Москва (timezone). Подключение к интернету.
+- Desktop Linux: Electron + то же самое; AppImage собирается на Linux.
+- Desktop Windows: Electron; STT-модель скачивается скриптом `скачать-модели.sh`/инструкцией `СОБРАТЬ.txt`.
+- Микрофон/wake-слова: безопасный контекст — `http://localhost` (HTTP) или https с установленным сертификатом. Скриншоты работают только на X11 (не Wayland).
+
+## Правила работы
+
+- Отвечать по-русски, кратко. Не логировать секреты. Не коммитить без явного запроса.
+- После правки синхрон. файлов — прогнать `node --check` и перезапустить `kanban-board`.

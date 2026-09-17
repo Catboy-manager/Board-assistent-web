@@ -18,6 +18,21 @@ const MAX_BODY = 30 * 1024 * 1024;
 const assist = require('./assist')({ dataDir: DATA_DIR });
 const telegram = require('./telegram-bot');
 
+async function resolveMoviePoster(title) {
+  const prompt = 'Найди в интернете официальный постер (обложку) фильма, сериала или мультфильма «' + title +
+    '». Используй websearch и webfetch. Верни ТОЛЬКО JSON без пояснений: {"poster":"полный URL http(s) картинки с постером","ok":true}, а если не нашёл — {"ok":false}. URL не должен быть data-URI.';
+  let reply = '';
+  await runOpencode({ model: config.ai.model || 'opencode/big-pickle', prompt, files: [] }, (t) => { reply += t; });
+  const m = reply.match(/"poster"\s*:\s*"([^"]+)"/);
+  const u = m && m[1];
+  if (u && /^https?:\/\/.+/.test(u) && !/^data:/i.test(u)) return u;
+  return '';
+}
+
+const movies = require('./movies')({ dataDir: DATA_DIR, readBody, json, aiResolve: resolveMoviePoster });
+const news = require('./news')({ dataDir: DATA_DIR, readBody, json });
+if (typeof movies.prime === 'function') movies.prime();
+
 let config = {};
 try { config = JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf8')); } catch (e) { console.error('config.json not read:', e.message); }
 
@@ -367,7 +382,7 @@ async function applyCardify(text) {
 }
 
 function runOpencode({ model, prompt, files }, onText) {
-  return new Promise((resolve, reject) => {
+  const attempt = (attemptNo) => new Promise((resolve, reject) => {
     const args = ['run', '-m', model, '--format', 'json', '--dir', getProjectsDir(), prompt];
     for (const f of files) args.push('--file', f);
     const bin = resolveOpencodeBin();
@@ -401,10 +416,25 @@ function runOpencode({ model, prompt, files }, onText) {
     child.on('error', (err) => { clearTimeout(killTimer); reject(err); });
     child.on('close', (code) => {
       clearTimeout(killTimer);
-      if (code !== 0 && textParts === 0) reject(new Error('opencode exit ' + code + ': ' + stderr.trim().slice(0, 500)));
-      else resolve({ model, note: 'answered via opencode CLI' });
+      if (code !== 0 && textParts === 0) {
+        const msg = 'opencode exit ' + code + ': ' + stderr.trim().slice(0, 500);
+        // free-tier big-pickle иногда отдаёт флапающий отказ — пробуем ещё раз
+        reject({ transient: attemptNo === 0, message: msg });
+      } else {
+        resolve({ model, note: 'answered via opencode CLI' });
+      }
     });
   });
+
+  return (async () => {
+    try {
+      return await attempt(0);
+    } catch (err) {
+      if (!err || !err.transient) throw err instanceof Error ? err : new Error(err && err.message ? err.message : 'opencode failed');
+      await new Promise(r => setTimeout(r, 3500));
+      return attempt(1);
+    }
+  })();
 }
 
 function buildPrompt(messages, cardify) {
@@ -729,6 +759,8 @@ async function handleRequest(req, res) {
       if (p.startsWith('/api/ai/voice') && req.method === 'POST') return await aiVoiceHandler(req, res, JSON.parse((await readBody(req)).toString() || '{}'));
       if (p.startsWith('/api/ai/chat') && req.method === 'POST') return await aiChatHandler(req, res, JSON.parse((await readBody(req)).toString() || '{}'));
       if (p.startsWith('/api/config')) return configHandler(req, res, req.method === 'GET' ? null : (JSON.parse((await readBody(req)).toString() || '{}')));
+      if (p.startsWith('/api/movies')) { if (await movies.handle(p, url, req, res)) return; }
+      if (p.startsWith('/api/news')) { if (await news.handle(p, url, req, res)) return; }
       if (req.method === 'GET' && p === '/api/ping') return json(res, 200, { ok: true });
       if (req.method === 'GET' && p === '/api/files') return filesListHandler(req, res, url);
       if (req.method === 'GET' && p === '/api/file') return fileDownloadHandler(req, res, url);
