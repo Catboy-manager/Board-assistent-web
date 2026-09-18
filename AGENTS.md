@@ -34,7 +34,7 @@
 - `/api/movies` GET/POST(добавить) · `/api/movies/:id/toggle|delete|resolve` · `/api/movies/resolve` (пакетный подбор постеров)
 - `/api/news?period=today|yesterday` · `/api/news/rate {id,rating}` (-2..2)
 - `/api/news?period=today|yesterday` · `/api/news/rate {id,rating}` (-2..2) · `/api/news/pref`
-- `/api/music` GET (список локальных треков из `~/Music`) · `/api/music/stream?path=…` (чейанк/стрийм с Range) · `/api/music/mark` (оценка трека)
+- `/api/music` GET (список локальных треков из `~/Music`) · `/api/music/stream?path=…` (чейанк/стрийм с Range) · `/api/music/mark` (оценка трека) · `/api/music/upload?name=…` POST (бинарное тело/файл → сохраняется в `~/Music`) · `/api/music/delete?path=…` DELETE (удаление файла)
 - `/api/notify/send` POST {title,text,app} — уведомление со смартфона (опц. ключ `KANBAN_NOTIFY_KEY`) · `/api/notify/history` · `/api/notify/events` SSE → client `/js/notify.js` (тост + уведомление браузера) · страница телефона `/notify.html`
 
 ## Прогресс реализации (checklist)

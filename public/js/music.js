@@ -15,6 +15,43 @@
     return (size / 1024).toFixed(0) + ' КБ';
   }
 
+  function toast(title, msg, warn) {
+    try { if (window.APP && window.APP.toast) window.APP.toast(title, msg, warn); } catch (e) {}
+  }
+
+  async function deleteTrack(i) {
+    const t = tracks[i];
+    if (!t) return;
+    if (!window.confirm('Удалить файл «' + (t.name || t.path) + '»?')) return;
+    try {
+      const audio = $('mu-audio');
+      if (audio && cur === i) { audio.pause(); audio.src = ''; }
+      const r = await fetch('/api/music/delete?path=' + encodeURIComponent(t.path), { method: 'DELETE' });
+      const d = await r.json().catch(() => ({}));
+      if (d.ok) {
+        tracks.splice(i, 1);
+        if (cur >= tracks.length) cur = tracks.length - 1;
+        toast('Музыка', 'Удалено: ' + t.name);
+        load();
+      } else toast('Музыка', (d.error || 'ошибка') + ' — ' + t.name, true);
+    } catch (e) { toast('Музыка', 'Ошибка удаления: ' + e.message, true); }
+  }
+
+  async function uploadTrack(file) {
+    try {
+      const r = await fetch('/api/music/upload?name=' + encodeURIComponent(file.name), {
+        method: 'POST',
+        headers: { 'Content-Type': file.type || 'application/octet-stream' },
+        body: file
+      });
+      const d = await r.json().catch(() => ({}));
+      if (d.ok) toast('Загрузка', '✓ Трек сохранён: ' + file.name);
+      else toast('Загрузка', (d.error || 'ошибка') + ' — ' + file.name, true);
+    } catch (e) {
+      toast('Загрузка', 'Ошибка: ' + e.message, true);
+    }
+  }
+
   async function load() {
     try {
       const r = await fetch('/api/music');
@@ -25,9 +62,10 @@
       box.innerHTML = `
         <div class="mu-head">
           <div class="mu-now">${tracks.length ? renderNow() : 'Нет файлов'}</div>
-          <div class="mu-count">${tracks.length} треков</div>
+          <button class="icon-btn mu-btn" id="mu-upload" title="Загрузить треки с этого устройства">⤴</button>
           <button class="icon-btn mu-btn" id="mu-shuffle" title="Перемешать">🔀</button>
         </div>
+        <input type="file" id="mu-file" accept="audio/*" multiple hidden>
         <audio id="mu-audio" preload="metadata"></audio>
         <div class="mu-controls">
           <button class="icon-btn" id="mu-prev" title="Предыдущий">⏮</button>
@@ -54,6 +92,7 @@
       <span class="mu-icon">${isCur ? '🔊' : '🎵'}</span>
       <span class="mu-name">${esc(name)}</span>
       <span class="mu-size">${fmt(t.size)}</span>
+      <button class="mu-del" data-del="${i}" title="Удалить файл">🗑</button>
     </div>`;
   }
 
@@ -75,6 +114,20 @@
     $('mu-next').onclick = () => step(1);
     $('mu-prev').onclick = () => step(-1, true);
     $('mu-shuffle').onclick = () => { shuffle = !shuffle; $('mu-shuffle').classList.toggle('on', shuffle); };
+    const up = $('mu-upload');
+    const fi = $('mu-file');
+    if (up && fi) {
+      up.onclick = () => { fi.click(); };
+      fi.addEventListener('change', async () => {
+        const files = Array.from(fi.files || []);
+        if (!files.length) return;
+        for (const f of files) {
+          await uploadTrack(f);
+        }
+        fi.value = '';
+        load();
+      });
+    }
     $('mu-track').onclick = (e) => {
       if (!audio.duration) return;
       const rect = $('mu-track').getBoundingClientRect();
@@ -94,6 +147,8 @@
     const listEl = $('mu-list');
     if (listEl) {
       listEl.onclick = (e) => {
+        const del = e.target.closest('.mu-del');
+        if (del) { deleteTrack(Number(del.dataset.del)); return; }
         const row = e.target.closest('.mu-row');
         if (row) selectTrack(Number(row.dataset.i));
       };

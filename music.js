@@ -96,6 +96,46 @@ module.exports = (deps) => {
       return json(res, 200, { ok: true });
     }
 
+    if (req.method === 'POST' && p === '/api/music/upload') {
+      const name = String(url.searchParams.get('name') || '').replace(/^.*[\\/]/, '').trim();
+      const ext = String(name).split('.').pop().toLowerCase();
+      if (!name || !/^[^<>:"/\\|?*\u0000-\u001f]+$/.test(name)) return json(res, 400, { error: 'bad name' });
+      if (!AUDIO_EXT[ext]) return json(res, 400, { error: 'not an audio file: .' + ext });
+      const buf = await readBodySafe(req);
+      if (!buf || !buf.length) return json(res, 400, { error: 'empty body' });
+      const target = path.join(MUSIC_DIR, name);
+      try { fs.mkdirSync(MUSIC_DIR, { recursive: true }); } catch (e) {}
+      try {
+        fs.writeFileSync(target, buf, { flag: 'w' });
+      } catch (e) {
+        return json(res, 500, { error: 'write failed: ' + e.message });
+      }
+      let size = 0;
+      try { size = fs.statSync(target).size; } catch (e) {}
+      return json(res, 200, { ok: true, name, size });
+    }
+
+    if ((req.method === 'DELETE' || req.method === 'POST') && p === '/api/music/delete') {
+      const rel = req.method === 'DELETE'
+        ? String(url.searchParams.get('path') || '').replace(/^\/+/, '')
+        : String(((JSON.parse(((await readBodySafe(req)) || '').toString() || '{}')).path) || '').replace(/^\/+/, '');
+      if (!rel) return json(res, 400, { error: 'no path' });
+      const target = path.normalize(path.join(MUSIC_DIR, rel));
+      const rootNorm = path.normalize(MUSIC_DIR);
+      if (target !== rootNorm && !target.startsWith(rootNorm + path.sep)) {
+        return json(res, 403, { error: 'outside music dir' });
+      }
+      try {
+        if (!fs.existsSync(target)) return json(res, 404, { error: 'not found' });
+        fs.unlinkSync(target);
+        delete marked[String(rel)];
+        saveMarked();
+        return json(res, 200, { ok: true });
+      } catch (e) {
+        return json(res, 500, { error: 'delete failed: ' + e.message });
+      }
+    }
+
     return false;
   }
 

@@ -612,6 +612,9 @@ label { display: block; font-size: 13px; color: var(--muted); margin: 12px 0 5px
 .mu-row .mu-icon { flex: none; }
 .mu-row .mu-name { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .mu-row .mu-size { font-size: 11px; color: var(--muted); flex: none; }
+.mu-row .mu-del { background: none; border: 0; color: var(--muted); cursor: pointer; font-size: 12px; padding: 2px 4px; opacity: .5; }
+.mu-row:hover .mu-del, .mu-row .mu-del:focus { opacity: 1; }
+.mu-row .mu-del:hover { color: #e66; }
 
 .mv-detail .mv-full { text-align: center; margin: 10px 0; }
 .mv-full img { max-width: 100%; max-height: 44vh; border-radius: 12px; cursor: zoom-in; transition: transform .25s ease; box-shadow: 0 6px 24px rgba(0,0,0,.5); }
