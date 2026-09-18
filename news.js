@@ -12,7 +12,16 @@ const SOURCES = [
   { id: 'kommersant', name: 'Ъ', url: 'https://www.kommersant.ru/rss/news.xml' },
   { id: 'habr', name: 'Хабр', url: 'https://habr.com/ru/rss/news/all/' },
   { id: 'nasa', name: 'NASA', url: 'https://www.nasa.gov/feed/' },
-  { id: 'space', name: 'Space', url: 'https://www.space.com/feeds/all' }
+  { id: 'space', name: 'Space', url: 'https://www.space.com/feeds/all' },
+  { id: 'bbc', name: 'BBC', url: 'https://feeds.bbci.co.uk/news/world/rss.xml' },
+  { id: 'reuters', name: 'Reuters', url: 'https://feeds.reuters.com/reuters/topNews' },
+  { id: 'verge', name: 'The Verge', url: 'https://www.theverge.com/rss/index.xml' },
+  { id: 'ign', name: 'IGN', url: 'https://feeds.ign.com/ign/all' },
+  { id: 'polygon', name: 'Polygon', url: 'https://www.polygon.com/rss/index.xml' },
+  { id: 'gamespot', name: 'GameSpot', url: 'https://www.gamespot.com/feeds/mashup/' },
+  { id: 'eurogamer', name: 'Eurogamer', url: 'https://www.eurogamer.net/feed' },
+  { id: 'explore', name: 'Explore', url: 'https://explore.org/feed' },
+  { id: 'arstechnica', name: 'Ars Technica', url: 'https://feeds.arstechnica.com/arstechnica/index' }
 ];
 
 const CATS = [
@@ -22,11 +31,11 @@ const CATS = [
   },
   {
     key: 'tech', label: 'Технологии', icon: '💻', base: 4,
-    words: ['технолог', 'смартфон', 'гаджет', 'компьютер', 'ноутбук', 'процессор', 'микросхем', 'чип', 'нейросет', 'нейрон', 'интеллект', 'робот', 'приложени', 'электроник', 'стартап', 'квант', 'айфон', 'iphone', 'android', 'андроид', 'алгоритм', 'кибератак', 'киберпреступ', 'вирус', 'хакер', 'датчик', 'батареи', 'беспилот', 'автопилот', 'интернет', 'сервер', 'данных', 'чипсет', 'gpt', 'artificial', 'technology', 'chip', 'robot', 'startup', 'software', 'hardware']
+    words: ['технолог', 'смартфон', 'гаджет', 'компьютер', 'ноутбук', 'процессор', 'микросхем', 'чип', 'нейросет', 'нейрон', 'интеллект', 'робот', 'приложени', 'электроник', 'стартап', 'квант', 'айфон', 'iphone', 'android', 'андроид', 'алгоритм', 'кибератак', 'киберпреступ', 'вирус', 'хакер', 'датчик', 'батареи', 'беспилот', 'автопилот', 'интернет', 'сервер', 'данных', 'чипсет', 'gpt', 'artificial', 'technology', 'chip', 'robot', 'startup', 'software', 'hardware', 'науч', 'учён', 'исследован', 'открыт', 'инноваци', 'изобретен', 'эксперимент', 'лаборатор', 'биотехнолог', 'генн', 'медицин', 'клиник', 'вакцин', 'лекарств', 'исслед', 'разработ', 'модел', 'ии', 'байт', 'telegram', 'видеокарт', 'графическ', 'аккумултор', 'зарядк', 'экран', 'диспле', 'камер', 'фотографи', 'искусственн']
   },
   {
     key: 'games', label: 'Игры', icon: '🎮', base: 3,
-    words: ['игра', 'игры', 'игровой', 'игров', 'видеоигр', 'видео-игр', 'гейм', 'геймер', 'киберспорт', 'приставк', 'эльден', 'steam', 'playstation', 'ps5', 'xbox', 'nintendo', 'switch', 'rpg', 'mmo', 'гейминг']
+    words: ['видеоигр', 'видео-игр', 'гейм', 'геймер', 'гейминг', 'игровой', 'игров', 'киберспорт', 'приставк', 'эльден', 'steam', 'playstation', 'ps5', 'xbox', 'nintendo', 'switch', 'rpg', 'mmo', 'игра', 'игры', 'геймплей', 'релиз', 'новинк', 'анонс', 'трейлер', 'представлен', 'выходит', 'вышла', 'выход']
   },
   {
     key: 'space', label: 'Космос', icon: '🚀', base: 3,
@@ -41,9 +50,9 @@ const CATS = [
 
 const RATINGS = { '-2': 'совсем не интересно', '-1': 'не интересно', '0': 'нейтрально', '1': 'интересно', '2': 'крайне заинтересован' };
 
-// Базовые интересы по категориям, пока пользователь не наставил оценки на конкретные новости.
-// Политика/техника/игры/космос — интересно, авто — не интересно.
-const DEFAULT_PREFS = { politics: 1, tech: 1, games: 0.5, space: 0.5, auto: -1.5 };
+// Базовые интересы по категориям — политика урезана (пользователь: «меньше политики»),
+// игры (особенно выход новинок) и технологии/наука — в приоритете.
+const DEFAULT_PREFS = { politics: 0.2, tech: 1.5, games: 1.8, space: 1.2, auto: -0.8 };
 
 module.exports = (deps) => {
   const { dataDir, readBody, json } = deps;
@@ -53,17 +62,22 @@ module.exports = (deps) => {
   let rated = {};
   let prefs = {};
   let items = {};
+  let vecs = [];      // динамические векторы интересов (авто-расширение) — [ {key,label,icon,base,learned:[]} ]
+  let learned = {};   // наращённые слова по статичным категориям: catKey -> Set-массив токенов
   try {
     const d = JSON.parse(fs.readFileSync(FILE, 'utf8'));
     rated = (d && d.rated) || {};
     prefs = (d && d.prefs) || {};
+    vecs = (d && d.vecs) || [];
+    learned = (d && d.learned) || {};
   } catch (e) {}
   try {
     const d = JSON.parse(fs.readFileSync(ITEMS_CACHE, 'utf8'));
     items = (d && d.items) || {};
   } catch (e) {}
 
-  function saveRated() { try { fs.writeFileSync(FILE, JSON.stringify({ rated, prefs }, null, 2)); } catch (e) {} }
+  function saveRated() { try { fs.writeFileSync(FILE, JSON.stringify({ rated, prefs, vecs, learned }, null, 2)); } catch (e) {} }
+  function saveVecs() { try { fs.writeFileSync(FILE, JSON.stringify({ rated, prefs, vecs, learned }, null, 2)); } catch (e) {} }
   function saveItems() {
     try {
       const slim = {};
@@ -126,24 +140,114 @@ module.exports = (deps) => {
     return false;
   }
 
+  const SPORTS_BLOCK = ['спорт', 'футбол', 'хокке', 'теннис', 'баскетбол', 'волейбол', 'турнир', 'чемпионат', 'олимпиад', 'сборной', 'матч', 'матче', 'гол', 'гола', 'голов', 'голкипер', 'легенд', 'игрок', 'игрока', 'игроков', 'футболист', 'хоккеист', 'болельщик', 'тренер', 'сезон', 'дивизион', 'sport', 'football', 'hockey', 'tennis', 'soccer', 'match', 'matchday', 'league', 'player', 'players', 'champion', 'olympic', 'nba', 'nhl', 'ufc', 'mma'];
+
   function categorize(text) {
     const t = String(text || '').toLowerCase();
+    const sportsy = SPORTS_BLOCK.some(k => matchesToken(t, k));
     for (const c of CATS) {
       if (c.key === 'other') continue;
       for (const w of c.words) {
-        if (matchesToken(t, w)) return { cat: c.key, w };
+        if (matchesToken(t, w)) {
+          if (c.key === 'games' && sportsy) return { cat: 'other', w: 'sport' };
+          return { cat: c.key, w };
+        }
       }
     }
     return { cat: 'other', w: '' };
   }
 
+  const STOP = new Set(['и','в','во','не','что','он','на','я','с','со','как','а','то','все','она','так','его','но','да','ты','к','у','же','вы','за','бы','по','только','ее','мне','было','вот','от','меня','еще','нет','о','из','ему','теперь','когда','даже','ну','вдруг','ли','если','уже','или','ни','быть','был','него','до','вас','нибудь','опять','уж','вам','ведь','там','потом','себя','ничего','ей','может','они','тут','где','есть','надо','ней','для','мы','тебя','их','чем','была','сам','чтоб','без','будто','чего','раз','тоже','себе','под','будет','ж','тогда','кто','этот','того','потому','этого','какой','совсем','ним','здесь','этом','один','почти','мой','тем','чтобы','нее','сейчас','были','куда','зачем','всех','никогда','можно','при','наконец','два','об','другой','хотя','после','над','больше','тот','через','эти','нас','про','всего','них','какая','много','разве','три','эту','моя','впрочем','хорошо','свою','этой','перед','иногда','лучше','чуть','том','нельзя','такой','им','более','всегда','конечно','всю','между','the','and','for','are','but','not','you','all','any','can','had','her','was','one','our','out','day','get','has','his','how','man','new','now','old','see','two','way','who','boy','did','its','let','put','say','she','too','use','that','with','have','this','will','your','from','they','know','want','been','good','much','some','time','very','when','come','here','just','like','long','make','many','over','such','take','than','them','well','were','what','would','для','население','сейчас']);
+
+  function newsTokens(t) {
+    return (String(t || '').toLowerCase().match(/[а-яёa-z]{4,}/g) || []).filter(x => x.length >= 4 && !STOP.has(x));
+  }
+
+  function vecSimilarity(vec, text) {
+    const toks = newsTokens(text);
+    if (!toks.length) return 0;
+    const set = new Set(Array.isArray(vec.learned) ? vec.learned : []);
+    let hit = 0;
+    for (const t of toks) if (set.has(t)) hit++;
+    return hit / Math.max(1, toks.length);
+  }
+
+  /* Вектор-карта: положительная оценка дообучает вектор словами новости
+     (вектор «поворачивается» к интересу). Если тема не знакома ни одному вектору —
+     автоматически СОЗДАЁТСЯ новый вектор: карта интересов расширяется по мере роста
+     интересов (динамический авто-рост vecs). */
+  function learnVec(vec, text, delta) {
+    const toks = newsTokens(text);
+    const seen = new Set(Array.isArray(vec.learned) ? vec.learned : []);
+    let changed = false;
+    for (const t of toks) {
+      if (seen.has(t)) continue;
+      if (delta >= 1 && seen.size < 80) { seen.add(t); changed = true; }
+    }
+    if (changed) {
+      vec.learned = Array.from(seen);
+      if (typeof saveVecs === 'function') saveVecs();
+    }
+    return changed;
+  }
+
+  function expandVecs(item, r) {
+    if (!item || !(r >= 1)) return 0;
+    const text = (item.title || '') + ' ' + (item.desc || '');
+    let best = null, bestSim = 0.14;
+    for (const v of vecs) {
+      const sim = vecSimilarity(v, text);
+      if (sim > bestSim) { bestSim = sim; best = v; }
+    }
+    if (!best) {
+      const label = String(item.title || 'Новая тема').split(' ').slice(0, 3).join(' ') || 'Тема';
+      vecs.push({ key: 'vec-' + (vecs.length + 1), label, icon: '✨', base: 0.4, learned: [] });
+      best = vecs[vecs.length - 1];
+    }
+    learnVec(best, text, 1);
+    if (typeof saveVecs === 'function') saveVecs();
+    return vecs.length;
+  }
+
   function weight(key) {
     const vals = Object.values(rated).filter(r => (r.k || r.cat) === key).map(r => r.r);
+    let w;
     if (!vals.length) {
       const p = prefs[key] != null ? prefs[key] : DEFAULT_PREFS[key];
-      return p != null ? p : 0;
+      w = p != null ? p : 0;
+    } else {
+      w = vals.reduce((a, b) => a + b, 0) / vals.length;
     }
-    return vals.reduce((a, b) => a + b, 0) / vals.length;
+    const own = Array.isArray(learned[key]) ? learned[key].length : 0;
+    if (own > 0) w += 0.15 * Math.log2(own + 1);
+    for (const v of vecs) {
+      if (!v || v.key !== key) continue;
+      const n = (Array.isArray(v.learned) ? v.learned : []).length;
+      if (n > 0) w += 0.18 * Math.log2(n + 1);
+    }
+    return Math.max(-2, Math.min(2, Math.round(w * 10) / 10));
+  }
+
+  /* ---------- Векторная карта интересов ----------
+     Каждая категория = вектор { key, label, base, words, learned:[] }.
+     Оценка новости дообучает вектор его словами (вектор «поворачивается» к интересу).
+     Новая тема, не похожая ни на один вектор, при позитивной оценке создаёт НОВЫЙ вектор
+     (карта расширяется по мере роста интересов) — динамический авто-рост `vecs`.
+     Данные сохраняются в news.json (vecs). */
+
+  function learnVec(vec, text, delta) {
+    const toks = (String(text || '').toLowerCase().match(/[а-яёa-z0-9]{4,}/g) || []).filter(t => t.length >= 4 && !STOP.has(t));
+    const seen = new Set(Array.isArray(vec.learned) ? vec.learned : []);
+    let changed = false;
+    for (const t of toks) {
+      if (seen.has(t)) continue;
+      if (delta >= 1 && seen.size < 80) { seen.add(t); changed = true; }
+    }
+    if (changed) {
+      vec.learned = Array.from(seen);
+      if (typeof saveVecs === 'function') saveVecs();
+    }
+    return toks;
   }
 
   async function collectAll() {
@@ -237,6 +341,7 @@ module.exports = (deps) => {
       const r = Number(body.rating);
       if (!it || !(r >= -2 && r <= 2)) return json(res, 400, { error: 'bad id/rating' });
       rated[it.key] = { cat: it.cat, r, ts: Date.now() };
+      if (r >= 1) { expandVecs(it, r); }
       saveRated();
       const weights = {};
       CATS.forEach(c => { weights[c.key] = weight(c.key); });

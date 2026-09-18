@@ -449,6 +449,12 @@ label { display: block; font-size: 13px; color: var(--muted); margin: 12px 0 5px
 .modal-foot { display: flex; gap: 10px; justify-content: flex-end; padding: 0 18px 16px; }
 .close-btn { background: transparent; border: none; color: var(--muted); font-size: 17px; }
 
+.guide-body { padding-top: 10px; }
+.guide-sec { margin: 0 0 14px; }
+.guide-sec b { display: block; font-size: 14px; margin-bottom: 4px; color: var(--accent); }
+.guide-sec ul { margin: 0; padding-left: 18px; }
+.guide-sec li { font-size: 13px; line-height: 1.55; color: var(--text); margin-bottom: 3px; }
+
 .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .select-row { display: flex; gap: 10px; align-items: center; }
 
@@ -572,8 +578,40 @@ label { display: block; font-size: 13px; color: var(--muted); margin: 12px 0 5px
 .mv-btn { border: 1px solid var(--border); background: transparent; color: var(--muted); border-radius: 8px; padding: 2px 9px; font-size: 12px; }
 .mv-btn:hover { color: var(--text); border-color: var(--accent); }
 .mv-btn.danger:hover { color: var(--danger); border-color: var(--danger); }
-.mv-resolve-all { padding: 7px; border: 1px dashed var(--border); background: transparent; color: var(--muted); border-radius: 10px; font-size: 12.5px; }
-.mv-resolve-all:hover { color: var(--text); border-color: var(--accent); }
+.res .mv-resolve-all { padding: 7px; border: 1px dashed var(--border); background: transparent; color: var(--muted); border-radius: 10px; font-size: 12.5px; }
+.res .mv-resolve-all:hover { color: var(--text); border-color: var(--accent); }
+
+.mv-flip { display: flex; align-items: stretch; gap: 8px; margin: 10px 0 4px; }
+.mv-flip .mv-arrow { flex: none; width: 34px; border: 1px solid var(--border); background: transparent; color: var(--muted); border-radius: 10px; font-size: 16px; cursor: pointer; }
+.mv-flip .mv-arrow:hover:not(:disabled) { color: var(--text); border-color: var(--accent); }
+.mv-flip .mv-arrow:disabled { opacity: .4; cursor: default; }
+.mv-flip .mv-frame { flex: 1; min-width: 0; }
+.mv-flip .mv-item { height: 100%; }
+.mv-dots { display: flex; justify-content: center; gap: 6px; margin: 6px 0; }
+.mv-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--border); transition: background .15s; }
+.mv-dot.on { background: var(--accent); }
+.mv-pos { display: flex; align-items: center; justify-content: center; gap: 10px; }
+.mv-pos .mv-idx { font-size: 12px; color: var(--muted); }
+
+.mu-head { display: flex; align-items: center; gap: 8px; padding: 6px 2px; }
+.mu-head .mu-now { flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; }
+.mu-nowico { font-size: 20px; }
+.mu-nm { font-size: 13px; font-weight: 600; word-break: break-word; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mu-count { font-size: 12px; color: var(--muted); flex: none; }
+.mu-btn.on { color: var(--accent); border-color: var(--accent); }
+.mu-controls { display: flex; align-items: center; justify-content: center; gap: 14px; margin: 8px 0 4px; }
+.mu-controls .icon-btn.play { font-size: 18px; width: 44px; height: 44px; border-radius: 50%; background: var(--accent); color: #0b0e13; border-color: transparent; }
+.mu-progress { display: flex; align-items: center; gap: 8px; margin: 6px 0 8px; }
+.mu-progress .mu-t { font-size: 11px; color: var(--muted); width: 34px; text-align: center; flex: none; }
+.mu-track { flex: 1; height: 5px; background: var(--border); border-radius: 3px; cursor: pointer; overflow: hidden; }
+.mu-fill { height: 100%; width: 0; background: var(--accent); border-radius: 3px; transition: width .1s linear; }
+.mu-list { display: flex; flex-direction: column; gap: 2px; max-height: 300px; overflow-y: auto; margin-top: 4px; }
+.mu-row { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 8px; cursor: pointer; font-size: 12.5px; }
+.mu-row:hover { background: var(--panel-2); }
+.mu-row.on { background: var(--panel-2); color: var(--accent); }
+.mu-row .mu-icon { flex: none; }
+.mu-row .mu-name { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mu-row .mu-size { font-size: 11px; color: var(--muted); flex: none; }
 
 .mv-detail .mv-full { text-align: center; margin: 10px 0; }
 .mv-full img { max-width: 100%; max-height: 44vh; border-radius: 12px; cursor: zoom-in; transition: transform .25s ease; box-shadow: 0 6px 24px rgba(0,0,0,.5); }

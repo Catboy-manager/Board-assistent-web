@@ -3,6 +3,7 @@
 (function () {
   let list = [];
   let busyposter = 0;
+  let idx = 0;
 
   const $ = id => document.getElementById(id);
   const esc = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -26,9 +27,22 @@
   async function load() {
     try {
       const r = await fetch('/api/movies');
-      if (r.ok) list = (await r.json()).movies || [];
+      if (r.ok) {
+        list = (await r.json()).movies || [];
+        list = shuffle(list);
+      }
     } catch (e) { list = list || []; }
+    if (idx >= list.length) idx = 0;
     render();
+  }
+
+  function shuffle(arr) {
+    const a = arr.slice();
+    for (let i = a.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [a[i], a[j]] = [a[j], a[i]];
+    }
+    return a;
   }
 
   function render() {
@@ -38,26 +52,37 @@
       bindAdd();
       return;
     }
-    const withPoster = list.filter(m => m.poster).length;
+    if (idx >= list.length) idx = list.length - 1;
+    const m = list[idx];
+    const withPoster = list.filter(x => x.poster).length;
     box.innerHTML = `
       <div class="sw-add"><input id="mv-add" placeholder="Добавить фильм / сериал…"><button id="mv-add-btn">+</button></div>
       ${withPoster < list.length ? `<button class="mv-resolve-all" id="mv-resolve-all">🖼 Найти постеры (${list.length - withPoster})</button>` : ''}
-      <div class="mv-list">${list.map(mvCard).join('')}</div>`;
+      <div class="mv-flip">
+        <button class="mv-arrow" id="mv-prev" title="Назад" ${list.length < 2 ? 'disabled' : ''}>◀</button>
+        <div class="mv-frame">${mvCard(m)}</div>
+        <button class="mv-arrow" id="mv-next" title="Далее" ${list.length < 2 ? 'disabled' : ''}>▶</button>
+      </div>
+      <div class="mv-dots">${list.map((x, i) => `<span class="mv-dot${i === idx ? ' on' : ''}"></span>`).join('')}</div>
+      <div class="mv-pos"><button class="mv-btn" id="mv-shuffle" title="Перемешать">🔀</button><span class="mv-idx">${idx + 1} / ${list.length}</span></div>`;
     bindAdd();
-    box.querySelectorAll('.mv-item').forEach(it => {
+    const it = document.querySelector('.mv-item');
+    if (it) {
       const id = it.dataset.id;
-      const m = list.find(x => x.id === id);
       it.querySelector('[data-mv-watch]').onclick = (e) => { e.stopPropagation(); toggle(id, m); };
       it.querySelector('[data-mv-del]').onclick = (e) => { e.stopPropagation(); del(id); };
-      it.querySelector('[data-mv-resolve]').onclick = (e) => { e.stopPropagation(); resolveOne(id); };
+      const rbtn = it.querySelector('[data-mv-resolve]');
+      if (rbtn) rbtn.onclick = (e) => { e.stopPropagation(); resolveOne(id); };
       it.onclick = () => openDetail(id);
-    });
-    box.querySelectorAll('.mv-post[data-ph]').forEach(img => {
-      img.onerror = () => {
+      const img = it.querySelector('.mv-post[data-ph]');
+      if (img) img.onerror = () => {
         const ph = String(img.dataset.ph || '?');
         img.replaceWith((() => { const d = document.createElement('div'); d.className = 'mv-post mv-ph'; d.textContent = ph; return d; })());
       };
-    });
+    }
+    $('mv-prev').onclick = () => { idx = (idx - 1 + list.length) % list.length; render(); };
+    $('mv-next').onclick = () => { idx = (idx + 1) % list.length; render(); };
+    $('mv-shuffle').onclick = () => { idx = Math.floor(Math.random() * list.length); render(); };
     const ra = box.querySelector('#mv-resolve-all');
     if (ra) ra.onclick = () => resolveAll();
   }

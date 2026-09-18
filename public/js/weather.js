@@ -59,7 +59,28 @@
     pop.style.left = 'auto';
     pop.style.right = '10px';
     pop.style.display = 'block';
-    pop.innerHTML = `<div style="font-size:13px;color:#9aa7b8;padding:8px 2px">Почасовая погода в ${('city' in d ? d.city : 'Москве')} — ближайшие 24 часа</div>` + hourlyHtml(d.hourly);
+    pop.innerHTML = `<div style="font-size:13px;color:#9aa7b8;padding:8px 2px">Почасовая погода в ${('city' in d ? d.city : 'Москве')} — ближайшие 24 часа</div>`
+      + `<div style="display:flex;gap:8px;padding:6px 2px 4px"><button id="weather-radar-btn" style="flex:1;padding:7px;border:1px solid #ffffff22;background:#0b0f16;color:#dfe6ef;border-radius:8px;font-size:13px;cursor:pointer">🌧 Карта осадков (Москва)</button></div>`
+      + `<div id="weather-radar-wrap" style="display:none;margin-top:4px"></div>`
+      + `<div style="font-size:13px;color:#9aa7b8;padding:6px 2px">—</div>`
+      + hourlyHtml(d.hourly);
+
+    const radarBtn = document.getElementById('weather-radar-btn');
+    const radarWrap = document.getElementById('weather-radar-wrap');
+    if (radarBtn) radarBtn.onclick = () => {
+      const show = radarWrap.style.display === 'none';
+      radarWrap.style.display = show ? 'block' : 'none';
+      radarBtn.textContent = show ? '✕ Скрыть карту осадков' : '🌧 Карта осадков (Москва)';
+      if (show && !radarWrap.querySelector('iframe')) {
+        const iframe = document.createElement('iframe');
+        iframe.src = 'https://embed.windy.com/embed2.html?lat=55.7558&lon=37.6173&zoom=6&level=surface&overlay=rain&menu=&message=true&marker=true&calendar=now&pressure=&type=map&location=coordinates&detail=&metricWind=default&metricTemp=default&radarRange=-1';
+        iframe.width = '100%';
+        iframe.height = '380';
+        iframe.style.cssText = 'border:0;border-radius:10px;background:#05070a';
+        iframe.loading = 'lazy';
+        radarWrap.appendChild(iframe);
+      }
+    };
   }
 
   function hourlyHtml(hourly) {

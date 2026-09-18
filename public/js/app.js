@@ -14,6 +14,7 @@ window.APP = {
     setInterval(() => this.checkEvents(), 20000);
 
     document.getElementById('btn-settings').onclick = () => this.openSettings();
+    document.getElementById('btn-guide').onclick = () => this.openGuide();
     document.getElementById('btn-add-column').onclick = () => this.addColumn();
     document.getElementById('btn-add-event').onclick = () => this.openAddEvent();
 
@@ -29,6 +30,10 @@ window.APP = {
       if (window.AI_INIT) window.AI_INIT();
     }
     this.initResizer();
+
+    if (!localStorage.getItem('kanbanGuideSeen')) {
+      setTimeout(() => { this.openGuide(); try { localStorage.setItem('kanbanGuideSeen', '1'); } catch (e) {} }, 350);
+    }
   },
 
   async fetchData() {
@@ -408,6 +413,56 @@ window.APP = {
       const e = document.getElementById('ai-config-status');
       if (e) e.textContent = 'Загружено из сервера ✓';
     } catch (e) {}
+  },
+
+  /* ---- Руководство по использованию доски ---- */
+  openGuide() {
+    this.openModal(`
+      <div class="modal-head"><h3>❓ Как пользоваться доской</h3><button class="close-btn" data-close-modal>✕</button></div>
+      <div class="modal-body guide-body">
+        <div class="guide-sec"><b>📋 Колонки и карточки</b>
+          <ul>
+            <li><b>+ Колонка</b> — добавьте новую колонку (например «В работе», «Готово»).</li>
+            <li>Кнопка <b>⋯</b> на колонке — переименовать, цвет, удалить.</li>
+            <li><b>+ Карточка</b> в колонке — новая задача; клик по карточке — редактировать.</li>
+            <li>В карточке можно задать: заголовок, текст, приоритет (важно/средне/низко), напоминание.</li>
+            <li><b>Перетаскивание</b>: удерживайте карточку мышью и перетащите в другую колонку (на ПК) или удерживайте палец ~0,5 с и отпустите в колонке (тач).</li>
+          </ul>
+        </div>
+        <div class="guide-sec"><b>🔔 События и уведомления</b>
+          <ul>
+            <li>Значок <b>🔔</b> — события; кнопка «+ Новое событие» — создать.</li>
+            <li>Когда наступает время события — всплывает уведомление на ПК и на доске.</li>
+          </ul>
+        </div>
+        <div class="guide-sec"><b>🎬 Вечер / 🗞 Новости / 🎵 Музыка</b>
+          <ul>
+            <li>Бокс снизу слева: <b>Вечер</b> — какой фильм посмотреть (постеры, кнопки «смотреть», стрелочки ◀▶ для перелистывания, 🔀 перемешать).</li>
+            <li><b>Новости</b> — сводка за сегодня/вчера, оценивайте новости 😞…🤩, лента подстраивается под интересы (векторная карта), ‹✨› — сводка ИИ.</li>
+            <li><b>Музыка</b> — плеер локальных файлов с ПК (папка «Музыка»), кнопки ⏮▶⏭🔀.</li>
+          </ul>
+        </div>
+        <div class="guide-sec"><b>🎙 Голос и ИИ</b>
+          <ul>
+            <li><b>🎤</b> — wake-слово («Саша»/«Саня»); <b>🤖</b> — ИИ-ассистент (чат, голос, напоминания, «записать в память»).</li>
+            <li>Лучший безопасный адрес для микрофона: <code>http://localhost:8080</code>.</li>
+          </ul>
+        </div>
+        <div class="guide-sec"><b>⚙️ Настройки</b>
+          <ul>
+            <li>Фон (цвет/градиент/изображение, размытие, затемнение) и ИИ (движок, модель, рабочая папка).</li>
+          </ul>
+        </div>
+        <div class="guide-sec"><b>🌧 Погода</b>
+          <ul>
+            <li>Клик по погоде вверху — почасовая раскладка + кнопка «Карта осадков (Москва)».</li>
+          </ul>
+        </div>
+      </div>
+      <div class="modal-foot"><button class="btn primary" data-close-guide>Понятно</button></div>
+    `);
+    const g = document.querySelector('[data-close-guide]');
+    if (g) g.onclick = () => this.closeModal();
   },
 
   /* ---- Modal helpers ---- */
