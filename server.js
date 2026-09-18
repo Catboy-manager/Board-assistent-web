@@ -32,6 +32,7 @@ async function resolveMoviePoster(title) {
 const movies = require('./movies')({ dataDir: DATA_DIR, readBody, json, aiResolve: resolveMoviePoster });
 const news = require('./news')({ dataDir: DATA_DIR, readBody, json });
 const music = require('./music')({ dataDir: DATA_DIR, json });
+const notify = require('./notify')({ dataDir: DATA_DIR, json });
 if (typeof movies.prime === 'function') movies.prime();
 
 let config = {};
@@ -763,6 +764,7 @@ async function handleRequest(req, res) {
       if (p.startsWith('/api/movies')) { if (await movies.handle(p, url, req, res)) return; }
       if (p.startsWith('/api/news')) { if (await news.handle(p, url, req, res)) return; }
       if (p.startsWith('/api/music')) { if (await music.handle(p, url, req, res)) return; }
+      if (p.startsWith('/api/notify')) { if (await notify.handle(p, url, req, res)) return; }
       if (req.method === 'GET' && p === '/api/ping') return json(res, 200, { ok: true });
       if (req.method === 'GET' && p === '/api/files') return filesListHandler(req, res, url);
       if (req.method === 'GET' && p === '/api/file') return fileDownloadHandler(req, res, url);
