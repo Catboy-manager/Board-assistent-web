@@ -35,7 +35,7 @@
 - `/api/news?period=today|yesterday` · `/api/news/rate {id,rating}` (-2..2)
 - `/api/news?period=today|yesterday` · `/api/news/rate {id,rating}` (-2..2) · `/api/news/pref`
 - `/api/music` GET (список локальных треков из `~/Music`) · `/api/music/stream?path=…` (чейанк/стрийм с Range) · `/api/music/mark` (оценка трека) · `/api/music/upload?name=…` POST (бинарное тело/файл → сохраняется в `~/Music`) · `/api/music/delete?path=…` DELETE (удаление файла)
-- `/api/notify/send` POST {title,text,app} — уведомление со смартфона (опц. ключ `KANBAN_NOTIFY_KEY`) · `/api/notify/history` · `/api/notify/events` SSE → client `/js/notify.js` (тост + уведомление браузера) · страница телефона `/notify.html`
+- `/api/notify/send` POST {title,text,app} — уведомление со смартфона (принимает и JSON, и form-urlencoded; опц. ключ `KANBAN_NOTIFY_KEY`) · `/api/notify/history?limit=…` (полная история) · `/api/notify/events` SSE → client `/js/notify.js` (тост + уведомление браузера + вкладка 🔔 с историей) · страница телефона `/notify.html` · тайлинг `/js/tiles.js` (кнопка ⛶ в side-widget, плитки с drag&drop и ресайзом)
 
 ## Прогресс реализации (checklist)
 

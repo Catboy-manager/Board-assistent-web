@@ -7,7 +7,7 @@ module.exports = (deps) => {
   const os = require('os');
 
   const FILE = path.join(dataDir, 'notify.json');
-  const HISTORY_MAX = 50;
+  const HISTORY_MAX = 500;
 
   let history = [];
   try { const d = JSON.parse(fs.readFileSync(FILE, 'utf8')); history = (d && d.history) || []; } catch (e) {}
@@ -51,7 +51,26 @@ module.exports = (deps) => {
     if (req.method === 'POST' && p === '/api/notify/send') {
       if (!keyOk(req, url)) return json(res, 401, { error: 'bad key' });
       let body = {};
-      try { body = JSON.parse((await readBody(req)).toString() || '{}'); } catch (e) {}
+      const raw = ((await readBody(req)) || '').toString();
+      const ctype = String(req.headers['content-type'] || '').toLowerCase();
+      const trimmed = raw.trim();
+      if (trimmed.startsWith('{') || ctype.includes('json')) {
+        try { body = JSON.parse(trimmed || '{}'); } catch (e) {}
+      }
+      if (!(body.title || body.text)) {
+        if (ctype.includes('application/x-www-form-urlencoded') || trimmed.includes('&') || trimmed.includes('=')) {
+          for (const pair of trimmed.split('&')) {
+            if (!pair) continue;
+            const eq = pair.indexOf('=');
+            const k = eq < 0 ? pair : pair.slice(0, eq);
+            const v = eq < 0 ? '' : pair.slice(eq + 1);
+            try { body[decodeURIComponent(k.replace(/\+/g, ' '))] = decodeURIComponent(v.replace(/\+/g, ' ')); } catch (e2) {}
+          }
+        }
+      }
+      if (!(body.title || body.text)) {
+        try { body = JSON.parse(trimmed || '{}'); } catch (e) {}
+      }
       const title = String(body.title || '').trim();
       const text = String(body.text || body.body || '').trim();
       const app = String(body.app || body.source || 'Телефон').trim().slice(0, 40);
@@ -61,7 +80,9 @@ module.exports = (deps) => {
     }
 
     if (req.method === 'GET' && p === '/api/notify/history') {
-      return json(res, 200, { history: history.slice(0, 20) });
+      const ql = parseInt(url.searchParams.get('limit') || '0', 10);
+      const limit = ql > 0 ? Math.min(ql, HISTORY_MAX) : history.length;
+      return json(res, 200, { history: history.slice(0, limit) });
     }
 
     if (req.method === 'GET' && p === '/api/notify/events') {

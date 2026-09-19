@@ -10,8 +10,65 @@
       if (Notification.permission === 'granted') new Notification(title, { body, icon: '🔔' });
     } catch (e) {}
   }
+  const $ = id => document.getElementById(id);
+  const esc = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
+  function fmtTs(ts) {
+    const d = new Date(ts);
+    const now = new Date();
+    const sameDay = d.toDateString() === now.toDateString();
+    const hh = String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+    if (sameDay) return 'сегодня ' + hh;
+    const y = now.getFullYear() - d.getFullYear();
+    if (y === 0 && d.getTime() > now.getTime() - 7 * 86400000) {
+      return ['вс', 'пн', 'вт', 'ср', 'чт', 'пт', 'сб'][d.getDay()] + ' ' + hh;
+    }
+    const dd = String(d.getDate()).padStart(2, '0'), mm = String(d.getMonth() + 1).padStart(2, '0');
+    return (y ? d.getFullYear() + '.' : '') + dd + '.' + mm + ' ' + hh;
+  }
+
+  let rendered = false;
+
+  function renderAll(items) {
+    const box = $('sw-notif');
+    if (!box) return;
+    if (!items || !items.length) {
+      box.innerHTML = '<div class="empty-state">Уведомлений пока нет</div>';
+      return;
+    }
+    box.innerHTML = items.map(it => `
+      <div class="nf-item${it.app === 'Телефон' ? ' phone' : ''}">
+        <div class="nf-head">
+          <span class="nf-app">${esc(it.app || 'Телефон')}</span>
+          <span class="nf-ts">${fmtTs(it.ts)}</span>
+        </div>
+        ${it.title ? `<div class="nf-title">${esc(it.title)}</div>` : ''}
+        ${it.text ? `<div class="nf-text">${esc(it.text)}</div>` : ''}
+      </div>`).join('');
+    box.scrollTop = 0;
+  }
+
+  async function loadHistory() {
+    try {
+      const r = await fetch('/api/notify/history?limit=200');
+      const d = await r.json();
+      renderAll((d.history || []).slice().reverse());
+    } catch (e) {}
+  }
+
+  function pushLive(item) {
+    rendered = false;
+    loadHistory();
+  }
+
   function initNotify() {
     try {
+      window.WIDGET = window.WIDGET || {};
+      const prevTab = window.WIDGET.tab;
+      window.WIDGET.tab = function (name) {
+        if (prevTab) prevTab(name);
+        if (name === 'notif') loadHistory();
+      };
       if (!window.EventSource) return;
       const es = new EventSource('/api/notify/events');
       es.onmessage = (ev) => {
@@ -21,10 +78,11 @@
         const title = '🔔 ' + (it.app || 'Телефон') + (it.title ? ': ' + it.title : '');
         toast(title, it.text || '');
         notify(title, it.text || '');
+        pushLive(it);
       };
       es.onerror = () => {};
     } catch (e) {}
   }
-  window.NOTIFY = { init: initNotify };
+  window.NOTIFY = { init: initNotify, loadHistory };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', initNotify); else initNotify();
 })();

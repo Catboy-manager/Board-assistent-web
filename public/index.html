@@ -99,12 +99,15 @@
         <button class="sw-tab active" data-tab="movies" title="Что посмотреть">🎬<span class="sw-label">Вечер</span></button>
         <button class="sw-tab" data-tab="news" title="Сводка новостей">🗞<span class="sw-label">Новости</span></button>
         <button class="sw-tab" data-tab="music" title="Музыка с ПК">🎵<span class="sw-label">Музыка</span></button>
+        <button class="sw-tab" data-tab="notif" title="История уведомлений">🔔<span class="sw-label">Уведомл.</span></button>
       </div>
+      <button id="sw-tiling" class="icon-btn sw-mini" title="Тайлинг: показать панели плитками">⛶</button>
       <button id="sw-toggle" class="icon-btn sw-mini" title="Свернуть / развернуть">–</button>
     </div>
     <div id="sw-movies" class="sw-pane active"></div>
     <div id="sw-news" class="sw-pane"></div>
     <div id="sw-music" class="sw-pane"></div>
+    <div id="sw-notif" class="sw-pane"></div>
   </div>
 
   <div id="modal" class="modal hidden"></div>
@@ -121,5 +124,6 @@
   <script src="/js/news.js"></script>
   <script src="/js/music.js"></script>
   <script src="/js/notify.js"></script>
+  <script src="/js/tiles.js"></script>
 </body>
 </html>
