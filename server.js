@@ -802,7 +802,11 @@ async function handleRequest(req, res) {
     if (!target.startsWith(PUBLIC_DIR)) { res.writeHead(403); return res.end('forbidden'); }
     if (!fs.existsSync(target) || fs.statSync(target).isDirectory()) { res.writeHead(404); return res.end('not found'); }
     const ext = path.extname(target).toLowerCase();
-    res.writeHead(200, { 'Content-Type': MIME[ext] || 'application/octet-stream' });
+    const isDoc = ['.html', '.htm', '.js', '.css', '.json', '.mjs'].includes(ext);
+    res.writeHead(200, {
+      'Content-Type': MIME[ext] || 'application/octet-stream',
+      'Cache-Control': isDoc ? 'no-store' : 'public, max-age=86400'
+    });
     fs.createReadStream(target).pipe(res);
   } catch (err) {
     serverError(res, err, 'router');

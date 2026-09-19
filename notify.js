@@ -49,9 +49,14 @@ module.exports = (deps) => {
 
   async function handle(p, url, req, res) {
     if (req.method === 'POST' && p === '/api/notify/send') {
-      if (!keyOk(req, url)) return json(res, 401, { error: 'bad key' });
+      if (!keyOk(req, url)) {
+        console.log('[notify] 401 key (' + String(req.headers['x-notify-key'] || 'нет') + ')');
+        return json(res, 401, { error: 'bad key' });
+      }
       let body = {};
       const raw = ((await readBody(req)) || '').toString();
+      console.log('[notify] POST ctype=' + String(req.headers['content-type'] || '?') +
+        ' ip=' + (req.socket.remoteAddress || '?') + ' body[' + raw.length + '] ' + raw.slice(0, 200));
       const ctype = String(req.headers['content-type'] || '').toLowerCase();
       const trimmed = raw.trim();
       if (trimmed.startsWith('{') || ctype.includes('json')) {
