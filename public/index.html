@@ -110,6 +110,33 @@
     <div id="sw-notif" class="sw-pane"></div>
   </div>
 
+  <div id="panels-right" class="panes-right">
+    <div id="ops-panel" class="side-panel ops-panel">
+      <div class="sp-head">
+        <h2>🖥 Ops <span class="sp-sub">трансляция opencode</span></h2>
+        <button class="icon-btn sp-mini" data-minim="ops" title="Свернуть / развернуть">–</button>
+      </div>
+      <div class="op-res" id="op-res"><span class="op-dot"></span><span>подключение…</span></div>
+      <div class="op-ai" id="op-ai"></div>
+      <div class="op-list" id="op-list"></div>
+    </div>
+
+    <div id="stats-panel" class="side-panel stats-panel">
+      <div class="sp-head">
+        <h2>📊 Сервер</h2>
+        <div class="st-tabs">
+          <button class="st-tab active" data-st="disk" title="Заполненность диска">💿</button>
+          <button class="st-tab" data-st="temp" title="Температура">🌡</button>
+          <button class="st-tab" data-st="ram" title="Оперативная память">🧠</button>
+        </div>
+        <button class="icon-btn sp-mini" data-minim="stats" title="Свернуть / развернуть">–</button>
+      </div>
+      <div class="st-pane active" id="st-disk"></div>
+      <div class="st-pane" id="st-temp"></div>
+      <div class="st-pane" id="st-ram"></div>
+    </div>
+  </div>
+
   <div id="modal" class="modal hidden"></div>
 
   <script src="/js/app.js"></script>
@@ -123,7 +150,9 @@
   <script src="/js/movies.js"></script>
   <script src="/js/news.js"></script>
   <script src="/js/music.js"></script>
-  <script src="/js/notify.js"></script>
+  <script src="/js/notify.js?v=3"></script>
+  <script src="/js/ops.js?v=2"></script>
+  <script src="/js/stats.js?v=1"></script>
   <script src="/js/tiles.js"></script>
 </body>
 </html>

@@ -52,7 +52,7 @@
     try {
       const r = await fetch('/api/notify/history?limit=200');
       const d = await r.json();
-      renderAll((d.history || []).slice().reverse());
+      renderAll((d.history || []).slice());
     } catch (e) {}
   }
 
@@ -75,6 +75,7 @@
         let d; try { d = JSON.parse(ev.data); } catch (e) { return; }
         if (d.type !== 'phone' || !d.item) return;
         const it = d.item;
+        if (d.replay) { pushLive(it); return; }
         const title = '🔔 ' + (it.app || 'Телефон') + (it.title ? ': ' + it.title : '');
         toast(title, it.text || '');
         notify(title, it.text || '');

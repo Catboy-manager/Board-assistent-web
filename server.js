@@ -33,6 +33,7 @@ const movies = require('./movies')({ dataDir: DATA_DIR, readBody, json, aiResolv
 const news = require('./news')({ dataDir: DATA_DIR, readBody, json });
 const music = require('./music')({ dataDir: DATA_DIR, json });
 const notify = require('./notify')({ dataDir: DATA_DIR, json });
+const ops = require('./ops')({ dataDir: DATA_DIR, json });
 if (typeof movies.prime === 'function') movies.prime();
 
 let config = {};
@@ -383,6 +384,81 @@ async function applyCardify(text) {
   return { text: joined || summary || 'Готово.', summary };
 }
 
+/* Слепок одного события opencode -> компактная запись для панели операций */
+function opText(s, n) {
+  return String(s == null ? '' : s).replace(/\s+/g, ' ').trim().slice(0, n || 200);
+}
+
+function toolToOp(part) {
+  const tool = typeof part.tool === 'string' ? part.tool : '';
+  const st = part.state || {};
+  const input = st.input || {};
+  const meta = st.metadata || {};
+  const out = {};
+  switch (tool) {
+    case 'bash':
+      out.icon = '⌨️'; out.title = 'bash';
+      out.text = opText(input.command);
+      if (st.status === 'error' || (meta.exit != null && +meta.exit !== 0)) out.err = true;
+      break;
+    case 'read': case 'list': case 'glob': case 'grep':
+      out.icon = '🔍'; out.title = tool;
+      out.text = opText(input.filePath || input.path || input.pattern || input.query);
+      break;
+    case 'write': case 'edit': {
+      out.icon = '📝'; out.title = tool;
+      out.text = opText(input.filePath || meta.filepath);
+      const d = meta.filediff;
+      if (tool === 'edit' && d && (d.additions || d.deletions)) {
+        out.text += (out.text ? '  ' : '') + '+' + (d.additions || 0) + ' −' + (d.deletions || 0);
+      }
+      break;
+    }
+    case 'webfetch':
+      out.icon = '🌐'; out.title = 'webfetch';
+      out.text = opText(input.url || input.text, 120);
+      break;
+    case 'websearch':
+      out.icon = '🔎'; out.title = 'websearch';
+      out.text = opText(input.query || input.text, 120);
+      break;
+    case 'skill':
+      out.icon = '🧩'; out.title = 'skill';
+      out.text = opText(input.name || input.description);
+      break;
+    case 'todowrite':
+      out.icon = '☑️'; out.title = 'todo'; out.text = '';
+      break;
+    case 'question':
+      out.icon = '❔'; out.title = 'question';
+      out.text = opText(input.question);
+      break;
+    default:
+      out.icon = '⚙️'; out.title = tool || 'tool';
+      out.text = opText(input.command || input.url || input.query || input.filePath || input.path || input.description || (typeof st.title === 'string' ? st.title : ''));
+  }
+  if (!out.text && typeof st.title === 'string') out.text = opText(st.title);
+  if (out.err) {
+    out.icon = '⚠️';
+    if (out.text) out.text += ' (' + opText(st.error || 'ошибка') + ')';
+  }
+  if (!out.text) return null;
+  return { icon: out.icon, title: out.title, text: out.text };
+}
+
+/* live-трансляция работ opencode: инструменты + расход токенов/стоимость шагов */
+function captureOpEvents(ev, aiStats) {
+  try {
+    if (ev.type === 'tool_use' && ev.part && ev.part.type === 'tool') {
+      const rec = toolToOp(ev.part);
+      if (rec) ops.recordOp(rec);
+    } else if (ev.type === 'step_finish' && ev.part && ev.part.tokens && aiStats) {
+      aiStats.tokens = ev.part.tokens.total;
+      if (typeof ev.part.cost === 'number') aiStats.cost = ev.part.cost;
+    }
+  } catch (e) {}
+}
+
 function runOpencode({ model, prompt, files }, onText) {
   const attempt = (attemptNo) => new Promise((resolve, reject) => {
     const args = ['run', '-m', model, '--format', 'json', '--dir', getProjectsDir(), prompt];
@@ -391,6 +467,8 @@ function runOpencode({ model, prompt, files }, onText) {
     const env = Object.assign({}, process.env, {
       OPENCODE_CONFIG: path.join(ROOT, 'ai-opencode.json')
     });
+    const runStart = Date.now();
+    const aiStats = { tokens: 0, cost: 0 };
     let child;
     try { child = spawn(bin, args, { stdio: ['ignore', 'pipe', 'pipe'], env }); }
     catch (e) { return reject(e); }
@@ -412,13 +490,16 @@ function runOpencode({ model, prompt, files }, onText) {
             textParts++;
             onText(ev.part.text);
           }
+          captureOpEvents(ev, aiStats);
         } catch (e) {}
       }
     });
     child.on('error', (err) => { clearTimeout(killTimer); reject(err); });
     child.on('close', (code) => {
       clearTimeout(killTimer);
-      if (code !== 0 && textParts === 0) {
+      const ok = code === 0 && textParts > 0;
+      try { ops.recordAi(model, Date.now() - runStart, ok, aiStats); } catch (e) {}
+      if (!ok) {
         const msg = 'opencode exit ' + code + ': ' + stderr.trim().slice(0, 500);
         // free-tier big-pickle иногда отдаёт флапающий отказ — пробуем ещё раз
         reject({ transient: attemptNo === 0, message: msg });
@@ -498,6 +579,8 @@ async function aiChatHandler(req, res, body) {
     }
 
     const prompt = buildPrompt(messages, wantCardify);
+    const reqText = opText(contentText((messages.slice().reverse().find(m => m.role === 'user') || {}).content || ''), 240);
+    if (reqText) try { ops.recordOp({ icon: '💬', title: 'Запрос', text: reqText }); } catch (e) {}
     const before = snapshotFiles(getProjectsDir());
     let reply = '';
     await runOpencode({ model: config.ai.model || 'opencode/big-pickle', prompt, files: attachments }, (t) => {
@@ -599,6 +682,7 @@ async function aiVoiceHandler(req, res, body) {
     if (transcript) {
       const wantCardify = intentCardify(transcript);
       const mc = assist.getMemoryContext(transcript);
+      try { ops.recordOp({ icon: '💬', title: 'Голосовой запрос', text: opText(transcript, 240) }); } catch (e) {}
       const prompt = (body.hint || 'Пользователь отправил голосовое сообщение. Распознанный текст приведён ниже; ответь на него.') +
         (wantCardify ? CARDIFY_RULE : '') +
         '\n\nРаспознанный текст: ' + transcript + (mc ? '\n\nПамять ассистента:\n' + mc : '') + '\n\nАссистент:';
@@ -764,6 +848,7 @@ async function handleRequest(req, res) {
       if (p.startsWith('/api/movies')) { if (await movies.handle(p, url, req, res)) return; }
       if (p.startsWith('/api/news')) { if (await news.handle(p, url, req, res)) return; }
       if (p.startsWith('/api/music')) { if (await music.handle(p, url, req, res)) return; }
+      if (p.startsWith('/api/ops')) { if (await ops.handle(p, url, req, res)) return; }
       if (p.startsWith('/api/notify')) { if (await notify.handle(p, url, req, res)) return; }
       if (req.method === 'GET' && p === '/api/ping') return json(res, 200, { ok: true });
       if (req.method === 'GET' && p === '/api/files') return filesListHandler(req, res, url);
@@ -865,9 +950,17 @@ if (httpsEnabled) {
     console.log('  HTTPS disabled: bad cert (' + e.message + ')');
   }
 
+
+function isLanHost(h) {
+  if (/^192\.168\.31\./.test(h)) return true;
+  if (/^10\./.test(h)) return true;
+  if (/^172\.(1[6-9]|2[0-9]|3[01])\./.test(h)) return true;
+  if (/\.local$/.test(h) || /\.lan$/.test(h)) return true;
+  return false;
+}
 http.createServer((req, res) => {
       const hostno = (req.headers.host || 'localhost').split(':')[0] || 'localhost';
-      const isLocal = hostno === 'localhost' || hostno === '127.0.0.1' || hostno === '::1';
+      const isLocal = hostno === 'localhost' || hostno === '127.0.0.1' || hostno === '::1' || isLanHost(hostno);
       if (isLocal) return handleRequest(req, res);
       let p = '';
       try { p = decodeURIComponent(new URL(req.url, 'http://x').pathname); } catch (e) { p = '/'; }
@@ -902,6 +995,7 @@ if (tgToken) {
     log: (m) => console.log('[telegram] ' + m),
     ask: async (text) => {
       const wantCardify = intentCardify(text);
+      try { ops.recordOp({ icon: '💬', title: 'Telegram', text: opText(String(text), 240) }); } catch (e) {}
       const prompt = (config.ai.systemPrompt || 'Ты полезный ИИ-ассистент.') +
         '\nОтвечай по-русски, кратко и по делу. Пользователь пишет из Telegram.' +
         (wantCardify ? CARDIFY_RULE : '') +

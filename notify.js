@@ -98,7 +98,7 @@ module.exports = (deps) => {
       });
       res.write(':ok\n\n');
       for (const rec of history.slice(0, 20)) {
-        res.write('data: ' + JSON.stringify({ type: 'phone', item: rec }) + '\n\n');
+        res.write('data: ' + JSON.stringify({ type: 'phone', item: rec, replay: true }) + '\n\n');
       }
       res.write(':hist\n\n');
       clients.add(res);

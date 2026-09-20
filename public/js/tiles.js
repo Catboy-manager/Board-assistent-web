@@ -20,6 +20,7 @@
 
   function loadState() {
     try { const d = JSON.parse(localStorage.getItem(STORE) || '{}'); if (d && d.order) state = Object.assign(state, d); } catch (e) {}
+    for (const p of PANES) if (!state.order.includes(p.id)) state.order.push(p.id);
   }
   function saveState() {
     try { localStorage.setItem(STORE, JSON.stringify(state)); } catch (e) {}
