@@ -34,10 +34,27 @@ const news = require('./news')({ dataDir: DATA_DIR, readBody, json });
 const music = require('./music')({ dataDir: DATA_DIR, json });
 const notify = require('./notify')({ dataDir: DATA_DIR, json });
 const ops = require('./ops')({ dataDir: DATA_DIR, json });
+const gh = require('./gh')({ dataDir: DATA_DIR, json });
+
+const consoleAuth = { key: '' };
+const consoleMod = require('./console')({
+  dataDir: DATA_DIR,
+  json,
+  readBody,
+  allowed: (req) => {
+    const key = consoleAuth.key;
+    const ip = String(req.socket.remoteAddress || '').replace(/^::ffff:/, '');
+    if (!key) return ip === '127.0.0.1' || ip === '::1' || req.socket.localAddress === '127.0.0.1';
+    return ip === '127.0.0.1' || ip === '::1' || req.socket.localAddress === '127.0.0.1' ||
+      req.headers['x-console-key'] === key || String(req.url || '').includes('key=' + key);
+  },
+  getKey: () => consoleAuth.key
+});
 if (typeof movies.prime === 'function') movies.prime();
 
 let config = {};
 try { config = JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf8')); } catch (e) { console.error('config.json not read:', e.message); }
+consoleAuth.key = String(process.env.KANBAN_CONSOLE_KEY || (config && config.consoleKey) || '');
 
 let db = defaultDb();
 try {
@@ -850,6 +867,8 @@ async function handleRequest(req, res) {
       if (p.startsWith('/api/music')) { if (await music.handle(p, url, req, res)) return; }
       if (p.startsWith('/api/ops')) { if (await ops.handle(p, url, req, res)) return; }
       if (p.startsWith('/api/notify')) { if (await notify.handle(p, url, req, res)) return; }
+      if (p.startsWith('/api/gh')) { if (await gh.handle(p, url, req, res)) return; }
+      if (p.startsWith('/api/console')) { if (await consoleMod.handle(p, url, req, res)) return; }
       if (req.method === 'GET' && p === '/api/ping') return json(res, 200, { ok: true });
       if (req.method === 'GET' && p === '/api/files') return filesListHandler(req, res, url);
       if (req.method === 'GET' && p === '/api/file') return fileDownloadHandler(req, res, url);

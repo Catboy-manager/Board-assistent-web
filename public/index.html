@@ -135,6 +135,19 @@
       <div class="st-pane" id="st-temp"></div>
       <div class="st-pane" id="st-ram"></div>
     </div>
+
+    <div id="sys-panel" class="side-panel sys-panel">
+      <div class="sp-head">
+        <h2>🖥 Система <span class="sp-sub">github + консоль</span></h2>
+        <div class="st-tabs">
+          <button class="st-tab active" data-sys="gh" title="Подборки инструментов с GitHub">⭐</button>
+          <button class="st-tab" data-sys="console" title="Консоль сервера (с LAN — по ключу)">🖥</button>
+        </div>
+        <button class="icon-btn sp-mini" data-minim="sys" title="Свернуть / развернуть">–</button>
+      </div>
+      <div class="sp-pane active" id="sp-gh"></div>
+      <div class="sp-pane" id="sp-console"></div>
+    </div>
   </div>
 
   <div id="modal" class="modal hidden"></div>
@@ -149,10 +162,13 @@
   <script src="/js/files.js"></script>
   <script src="/js/movies.js"></script>
   <script src="/js/news.js"></script>
+  <script src="/js/gh.js"></script>
   <script src="/js/music.js"></script>
   <script src="/js/notify.js?v=3"></script>
   <script src="/js/ops.js?v=2"></script>
   <script src="/js/stats.js?v=1"></script>
+  <script src="/js/console.js"></script>
+  <script src="/js/sys.js"></script>
   <script src="/js/tiles.js"></script>
 </body>
 </html>

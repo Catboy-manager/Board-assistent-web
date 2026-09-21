@@ -88,8 +88,7 @@
   function initOps() {
     document.querySelectorAll('[data-minim]').forEach(b => {
       b.onclick = () => {
-        const id = b.getAttribute('data-minim');
-        const p = $(id === 'ops' ? 'ops-panel' : 'stats-panel');
+        const p = $(b.getAttribute('data-minim') + '-panel');
         if (!p) return;
         const on = p.classList.toggle('mini');
         b.textContent = on ? '+' : '–';
