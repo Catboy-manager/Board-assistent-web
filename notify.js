@@ -12,6 +12,16 @@ module.exports = (deps) => {
   let history = [];
   try { const d = JSON.parse(fs.readFileSync(FILE, 'utf8')); history = (d && d.history) || []; } catch (e) {}
 
+  const IGNORED_APPS = String(process.env.KANBAN_NOTIFY_IGNORE || 'downloads,youtube morphe')
+    .split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+
+  function isIgnored(item) {
+    return IGNORED_APPS.includes(String(item && item.app || '').trim().toLowerCase());
+  }
+  const keptBefore = history.length;
+  history = history.filter(r => !isIgnored(r));
+  if (history.length !== keptBefore) saveHistory();
+
   const clients = new Set();
 
   const NOTIFY_KEY = process.env.KANBAN_NOTIFY_KEY || '';
@@ -21,6 +31,7 @@ module.exports = (deps) => {
   }
 
   function addNotify(item) {
+    if (isIgnored(item)) return null;
     const rec = Object.assign({ id: 'n' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), ts: Date.now() }, item);
     history.unshift(rec);
     if (history.length > HISTORY_MAX) history = history.slice(0, HISTORY_MAX);
@@ -81,7 +92,8 @@ module.exports = (deps) => {
       const app = String(body.app || body.source || 'Телефон').trim().slice(0, 40);
       if (!title && !text) return json(res, 400, { error: 'required: title or text' });
       const rec = addNotify({ title: title.slice(0, 160), text: text.slice(0, 500), app });
-      return json(res, 200, { ok: true, id: rec.id });
+      if (rec) return json(res, 200, { ok: true, id: rec.id });
+      return json(res, 200, { ok: true, ignored: true });
     }
 
     if (req.method === 'GET' && p === '/api/notify/history') {
