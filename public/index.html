@@ -43,10 +43,91 @@
     </div>
   </header>
 
-  <main id="board" aria-label="Канбан-доска">
-    <div id="board-inner"></div>
-    <button id="btn-add-column" class="add-column">+ Колонка</button>
-  </main>
+  <div id="world">
+    <div id="world-bg"></div>
+    <main id="board" aria-label="Канбан-доска">
+      <div id="board-inner"></div>
+    </main>
+
+  <div id="side-widget" class="side-widget">
+    <div class="sw-head">
+      <div class="sw-tabs">
+        <button class="sw-tab active" data-tab="movies" title="Что посмотреть">🎬<span class="sw-label">Вечер</span></button>
+        <button class="sw-tab" data-tab="news" title="Сводка новостей">🗞<span class="sw-label">Новости</span></button>
+        <button class="sw-tab" data-tab="music" title="Музыка с ПК">🎵<span class="sw-label">Музыка</span></button>
+        <button class="sw-tab" data-tab="notif" title="История уведомлений">🔔<span class="sw-label">Уведомл.</span></button>
+      </div>
+      <button id="sw-tiling" class="icon-btn sw-mini" title="Тайлинг: показать панели плитками">⛶</button>
+      <button id="sw-toggle" class="icon-btn sw-mini" title="Свернуть / развернуть">–</button>
+    </div>
+    <div id="sw-movies" class="sw-pane active"></div>
+    <div id="sw-news" class="sw-pane"></div>
+    <div id="sw-music" class="sw-pane"></div>
+    <div id="sw-notif" class="sw-pane"></div>
+  </div>
+
+  <div id="panels-right" class="panes-right">
+    <div id="ops-panel" class="side-panel ops-panel">
+      <div class="sp-head">
+        <h2>🖥 Ops <span class="sp-sub">трансляция opencode</span></h2>
+        <button class="icon-btn sp-mini" data-minim="ops" title="Свернуть / развернуть">–</button>
+      </div>
+      <div id="sp-ops" class="sp-pane active">
+        <div class="op-res" id="op-res"><span class="op-dot"></span><span>подключение…</span></div>
+        <div class="op-ai" id="op-ai"></div>
+        <div class="op-list" id="op-list"></div>
+      </div>
+    </div>
+
+    <div id="stats-panel" class="side-panel stats-panel">
+      <div class="sp-head">
+        <h2>📊 Сервер</h2>
+        <button class="icon-btn sp-mini" data-minim="stats" title="Свернуть / развернуть">–</button>
+      </div>
+      <div id="sp-stats" class="sp-pane active">
+        <div class="st-tabs">
+          <button class="st-tab active" data-st="disk" title="Заполненность диска">💿</button>
+          <button class="st-tab" data-st="temp" title="Температура">🌡</button>
+          <button class="st-tab" data-st="ram" title="Оперативная память">🧠</button>
+        </div>
+        <div class="st-pane active" id="st-disk"></div>
+        <div class="st-pane" id="st-temp"></div>
+        <div class="st-pane" id="st-ram"></div>
+      </div>
+    </div>
+
+    <div id="sys-panel" class="side-panel sys-panel">
+      <div class="sp-head">
+        <h2>🖥 Система <span class="sp-sub">github + консоль</span></h2>
+        <div class="st-tabs">
+          <button class="st-tab active" data-sys="gh" title="Подборки инструментов с GitHub">⭐</button>
+          <button class="st-tab" data-sys="console" title="Консоль сервера (с LAN — по ключу)">🖥</button>
+        </div>
+        <button class="icon-btn sp-mini" data-minim="sys" title="Свернуть / развернуть">–</button>
+      </div>
+      <div class="sp-pane active" id="sp-gh"></div>
+      <div class="sp-pane" id="sp-console"></div>
+    </div>
+
+    <div id="yt-panel" class="side-panel yt-panel">
+      <div class="sp-head">
+        <h2>▶ YouTube <span class="sp-sub">видео и очередь</span></h2>
+        <button class="icon-btn sp-mini" data-minim="yt" title="Свернуть / развернуть">–</button>
+      </div>
+      <div id="sp-yt" class="sp-pane active"></div>
+    </div>
+
+    <div id="interests-panel" class="side-panel interests-panel">
+      <div class="sp-head">
+        <h2>🧠 Интересы <span class="sp-sub">векторная карта</span></h2>
+        <button class="icon-btn sp-mini" data-minim="interests" title="Свернуть / развернуть">–</button>
+      </div>
+      <div id="sp-interests" class="sp-pane active"></div>
+    </div>
+  </div>
+
+  <div id="board-panels" class="board-panels"></div>
+  </div>
 
   <div id="event-toasts" class="toasts"></div>
 
@@ -94,67 +175,17 @@
 
   <div id="ai-resizer" title="Перетащите, чтобы сменить ширину"></div>
 
-  <div id="side-widget" class="side-widget">
-    <div class="sw-head">
-      <div class="sw-tabs">
-        <button class="sw-tab active" data-tab="movies" title="Что посмотреть">🎬<span class="sw-label">Вечер</span></button>
-        <button class="sw-tab" data-tab="news" title="Сводка новостей">🗞<span class="sw-label">Новости</span></button>
-        <button class="sw-tab" data-tab="music" title="Музыка с ПК">🎵<span class="sw-label">Музыка</span></button>
-        <button class="sw-tab" data-tab="notif" title="История уведомлений">🔔<span class="sw-label">Уведомл.</span></button>
-      </div>
-      <button id="sw-tiling" class="icon-btn sw-mini" title="Тайлинг: показать панели плитками">⛶</button>
-      <button id="sw-toggle" class="icon-btn sw-mini" title="Свернуть / развернуть">–</button>
-    </div>
-    <div id="sw-movies" class="sw-pane active"></div>
-    <div id="sw-news" class="sw-pane"></div>
-    <div id="sw-music" class="sw-pane"></div>
-    <div id="sw-notif" class="sw-pane"></div>
-  </div>
-
-  <div id="panels-right" class="panes-right">
-    <div id="ops-panel" class="side-panel ops-panel">
-      <div class="sp-head">
-        <h2>🖥 Ops <span class="sp-sub">трансляция opencode</span></h2>
-        <button class="icon-btn sp-mini" data-minim="ops" title="Свернуть / развернуть">–</button>
-      </div>
-      <div class="op-res" id="op-res"><span class="op-dot"></span><span>подключение…</span></div>
-      <div class="op-ai" id="op-ai"></div>
-      <div class="op-list" id="op-list"></div>
-    </div>
-
-    <div id="stats-panel" class="side-panel stats-panel">
-      <div class="sp-head">
-        <h2>📊 Сервер</h2>
-        <div class="st-tabs">
-          <button class="st-tab active" data-st="disk" title="Заполненность диска">💿</button>
-          <button class="st-tab" data-st="temp" title="Температура">🌡</button>
-          <button class="st-tab" data-st="ram" title="Оперативная память">🧠</button>
-        </div>
-        <button class="icon-btn sp-mini" data-minim="stats" title="Свернуть / развернуть">–</button>
-      </div>
-      <div class="st-pane active" id="st-disk"></div>
-      <div class="st-pane" id="st-temp"></div>
-      <div class="st-pane" id="st-ram"></div>
-    </div>
-
-    <div id="sys-panel" class="side-panel sys-panel">
-      <div class="sp-head">
-        <h2>🖥 Система <span class="sp-sub">github + консоль</span></h2>
-        <div class="st-tabs">
-          <button class="st-tab active" data-sys="gh" title="Подборки инструментов с GitHub">⭐</button>
-          <button class="st-tab" data-sys="console" title="Консоль сервера (с LAN — по ключу)">🖥</button>
-        </div>
-        <button class="icon-btn sp-mini" data-minim="sys" title="Свернуть / развернуть">–</button>
-      </div>
-      <div class="sp-pane active" id="sp-gh"></div>
-      <div class="sp-pane" id="sp-console"></div>
-    </div>
-  </div>
-
   <div id="modal" class="modal hidden"></div>
 
   <div id="palette" class="palette"></div>
-  <div id="board-panels" class="board-panels"></div>
+
+  <button id="btn-add-column" class="add-column">+ Колонка</button>
+
+  <div id="zoom-ctl" class="zoom-ctl">
+    <button class="icon-btn" data-zoom="out" title="Отдалить">−</button>
+    <button class="icon-btn" data-zoom="reset" title="Масштаб 100%">1:1</button>
+    <button class="icon-btn" data-zoom="in" title="Приблизить">+</button>
+  </div>
 
   <script src="/js/app.js"></script>
   <script src="/js/trace.js"></script>
@@ -174,6 +205,9 @@
   <script src="/js/console.js"></script>
   <script src="/js/sys.js"></script>
   <script src="/js/tiles.js"></script>
+  <script src="/js/canvas.js?v=1"></script>
+  <script src="/js/youtube.js?v=2"></script>
+  <script src="/js/interests.js?v=1"></script>
   <script src="/js/place.js"></script>
 </body>
 </html>
