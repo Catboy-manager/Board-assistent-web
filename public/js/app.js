@@ -222,6 +222,9 @@ window.APP = {
     const { columns, cards } = this.db.board;
     const pos = this.colPos();
     const autoMode = columns.every(c => pos[c.id] === undefined);
+    let safeMaxX = 1800;
+    const C0 = window.CANVAS;
+    if (C0 && C0.safeRight) safeMaxX = Math.max(300, C0.safeRight() - 300);
     let ax = 24, ay = 80, lineH = 0;
     columns.forEach(col => {
       const colCards = cards.filter(c => c.columnId === col.id);
@@ -231,7 +234,15 @@ window.APP = {
       div.style.setProperty('--col-color', col.color || '#888');
       let px = pos[col.id] ? pos[col.id].x : null;
       let py = pos[col.id] ? pos[col.id].y : null;
-      if (px === null || py === null) { px = ax; py = ay; ax += 320; if (ax > 1800) { ax = 24; ay += 400; } lineH = Math.max(lineH, 0); }
+      if (px === null || py === null) { px = ax; py = ay; ax += 320; if (ax > safeMaxX) { ax = 24; ay += 400; } lineH = Math.max(lineH, 0); }
+      else {
+        let minTop = 0, maxX = 1800;
+        const C = window.CANVAS;
+        if (C && C.safeTop) minTop = C.safeTop();
+        if (C && C.safeRight) maxX = Math.max(24, C.safeRight() - 300);
+        if (py < minTop) py = minTop;
+        if (px > maxX) px = maxX;
+      }
       div.style.left = px + 'px';
       div.style.top = py + 'px';
       div.style.position = 'absolute';
@@ -280,8 +291,11 @@ window.APP = {
     head.addEventListener('pointermove', e => {
       if (!start) return;
       const p = window.CANVAS.toCanvas(e.clientX, e.clientY);
-      div.style.left = (start.sx + (p.cx - start.p0.cx)) + 'px';
-      div.style.top = (start.sy + (p.cy - start.p0.cy)) + 'px';
+      let minTop = 0, maxX = 1800;
+      if (window.CANVAS.safeTop) minTop = window.CANVAS.safeTop();
+      if (window.CANVAS.safeRight) maxX = Math.max(24, window.CANVAS.safeRight() - 300);
+      div.style.left = Math.min(maxX, start.sx + (p.cx - start.p0.cx)) + 'px';
+      div.style.top = Math.max(minTop, start.sy + (p.cy - start.p0.cy)) + 'px';
     });
     const up = () => {
       if (!start) return;

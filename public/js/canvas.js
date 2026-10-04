@@ -66,12 +66,31 @@
       };
     }
 
+    function safeTop() {
+      const tb = document.getElementById('topbar');
+      const h = tb ? tb.getBoundingClientRect().height : 65;
+      return Math.ceil((h + 6 + (window.scrollY || 0)) / st.s);
+    }
+
+    function safeRight() {
+      const w = window.innerWidth || 0;
+      let dock = 0;
+      if (w >= 1000) {
+        const av = getComputedStyle(document.documentElement).getPropertyValue('--ai-w');
+        const m = /(-?[\d.]+)px/.exec(av || '');
+        if (m) dock = parseFloat(m[1]);
+      }
+      return Math.ceil((w - dock + (window.scrollX || 0)) / st.s);
+    }
+
     window.CANVAS = {
       view: function () { return { s: st.s, x: 0, y: 0 }; },
       zoomAt: zoomAt,
       reset: reset,
       toCanvas: toCanvas,
       visible: visible,
+      safeTop: safeTop,
+      safeRight: safeRight,
       save: save,
       apply: apply
     };
@@ -96,12 +115,54 @@
       }
     }, { passive: false });
 
+    const pan = { on: false, px: 0, py: 0, sx: 0, sy: 0, id: null };
+
+    function isPanTarget(t) {
+      return t && (t.id === 'world' || t.id === 'world-bg' || t.id === 'board' || t.id === 'board-inner');
+    }
+
+    world.addEventListener('pointerdown', function (e) {
+      if ((e.isPrimary !== undefined && !e.isPrimary)) return;
+      if (e.button !== 0 && e.button !== 1) return;
+      if (!isPanTarget(e.target)) return;
+      const sc = scroll();
+      pan.on = true;
+      pan.px = e.clientX;
+      pan.py = e.clientY;
+      pan.sx = sc.x;
+      pan.sy = sc.y;
+      pan.id = e.pointerId;
+      try { world.setPointerCapture(e.pointerId); } catch (err) { /* ignore */ }
+      world.classList.add('panning');
+    });
+
+    world.addEventListener('pointermove', function (e) {
+      if (!pan.on || e.pointerId !== pan.id) return;
+      scrollTo(pan.sx - (e.clientX - pan.px), pan.sy - (e.clientY - pan.py));
+    });
+
+    function endPan(e) {
+      if (e && pan.id != null && e.pointerId !== pan.id) return;
+      if (pan.id != null) {
+        try {
+          if (world.hasPointerCapture(pan.id)) world.releasePointerCapture(pan.id);
+        } catch (err) { /* ignore */ }
+      }
+      pan.on = false;
+      pan.id = null;
+      world.classList.remove('panning');
+      save();
+    }
+    world.addEventListener('pointerup', endPan);
+    world.addEventListener('pointercancel', endPan);
+
     const touches = new Map();
     let lastSpan = null;
 
     world.addEventListener('pointerdown', function (e) {
       touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
       if (touches.size === 2) {
+        pan.on = false;
         lastSpan = null;
       }
     }, true);

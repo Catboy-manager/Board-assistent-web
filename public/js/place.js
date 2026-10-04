@@ -143,9 +143,23 @@
     return C.visible();
   }
 
+  function safeTopY() {
+    const C = window.CANVAS;
+    if (C && C.safeTop) return C.safeTop();
+    return 0;
+  }
+
+  function safeRightX() {
+    const C = window.CANVAS;
+    if (C && C.safeRight) return C.safeRight();
+    return CANVAS_BOUND;
+  }
+
   function clamp(id, x, y, w, h) {
-    x = Math.max(-CANVAS_BOUND, Math.min(CANVAS_BOUND - w, x));
-    y = Math.max(0, Math.min(CANVAS_BOUND - h, y));
+    const xMin = -CANVAS_BOUND;
+    const xMax = Math.max(xMin, safeRightX() - w);
+    x = Math.max(xMin, Math.min(xMax, x));
+    y = Math.max(safeTopY(), Math.min(CANVAS_BOUND - h, y));
     return { x, y, w, h };
   }
 

@@ -39,7 +39,8 @@
 
     document.getElementById('weather').title =
       `Сейчас: ${now[1]}, ${Math.round(d.current.temperature_2m)}° (ощущается ${Math.round(d.current.apparent_temperature)}°)\n` +
-      `Ветер ${Math.round(d.current.wind_speed_10m)} км/ч, влажность ${d.current.relative_humidity_2m}%`;
+      `Ветер ${Math.round(d.current.wind_speed_10m)} км/ч, влажность ${d.current.relative_humidity_2m}%` +
+      (d.stale ? '\n⚠ Данные устаревшие — сервис погоды недоступен' : '');
 
     const pop = document.getElementById('weather-pop');
     if (pop) pop.innerHTML = hourlyHtml(d.hourly);

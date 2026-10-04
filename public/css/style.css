@@ -103,19 +103,22 @@ label { display: block; font-size: 13px; color: var(--muted); margin: 12px 0 5px
   display: flex;
   align-items: center;
   gap: 14px;
-  padding: 10px 16px;
+  height: 64px;
+  padding: 0 16px;
   background: linear-gradient(180deg, rgba(13,17,23,0.92), rgba(13,17,23,0.75));
   backdrop-filter: blur(12px);
   border-bottom: 1px solid var(--border);
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   position: fixed;
   top: 0;
   left: 0;
   right: 0;
   z-index: 300;
+  overflow: hidden;
 }
-.brand { display: flex; align-items: center; gap: 10px; }
-.logo { font-size: 26px; }
+.brand { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.logo { font-size: 26px; flex: none; }
+.brand-text { white-space: nowrap; overflow: hidden; min-width: 0; }
 .brand-text h1 { font-size: 17px; margin: 0; }
 #clock { font-size: 12px; color: var(--muted); }
 
@@ -129,12 +132,14 @@ label { display: block; font-size: 13px; color: var(--muted); margin: 12px 0 5px
   border-radius: var(--radius);
   padding: 6px 14px;
   cursor: pointer;
+  min-width: 0;
+  flex-shrink: 1;
 }
 .we-now { display: flex; align-items: center; gap: 8px; font-size: 15px; }
 #w-ico { font-size: 22px; }
 #w-temp { font-weight: 700; font-size: 17px; }
 .w-desc { color: var(--muted); font-size: 13px; }
-.we-tomorrow { color: var(--muted); font-size: 12.5px; border-left: 1px solid var(--border); padding-left: 12px; white-space: nowrap; }
+.we-tomorrow { color: var(--muted); font-size: 12.5px; border-left: 1px solid var(--border); padding-left: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 300px; }
 
 .top-actions { display: flex; gap: 8px; position: relative; }
 .badge {
@@ -513,7 +518,7 @@ label { display: block; font-size: 13px; color: var(--muted); margin: 12px 0 5px
 
 /* ---------- Responsive ---------- */
 @media (max-width: 860px) {
-  #topbar { gap: 8px; padding: 8px 10px; }
+  #topbar { gap: 8px; padding: 0 10px; height: 58px; }
   .we-tomorrow { display: none; }
   .w-desc { display: none; }
   .brand-text h1 { font-size: 15px; }
@@ -857,7 +862,9 @@ label { display: block; font-size: 13px; color: var(--muted); margin: 12px 0 5px
   will-change: transform;
   touch-action: none;
   user-select: none;
+  cursor: grab;
 }
+#world.panning { cursor: grabbing; }
 #world-bg {
   position: absolute;
   left: 0;

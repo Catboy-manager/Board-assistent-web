@@ -35,6 +35,7 @@ const music = require('./music')({ dataDir: DATA_DIR, json });
 const notify = require('./notify')({ dataDir: DATA_DIR, json });
 const ops = require('./ops')({ dataDir: DATA_DIR, json });
 const gh = require('./gh')({ dataDir: DATA_DIR, json });
+const youtube = require('./youtube')({ dataDir: DATA_DIR, json });
 
 const consoleAuth = { key: '' };
 const consoleMod = require('./console')({
@@ -138,15 +139,40 @@ function json(res, code, obj) {
 }
 
 function serverError(res, err, log = '') {
-  if (log) console.error(log, err && err.message);
-  json(res, 500, { error: err && err.message ? err.message : 'server error' });
+  if (log) console.error(log, err && (err.stack || err.message));
 }
 
 /* ---------------- Weather ---------------- */
 
 let weatherCache = { at: 0, data: null };
+const WEATHER_CACHE_FILE = path.join(DATA_DIR, 'weather.json');
+const WEATHER_TTL = 10 * 60000;
 
-async function getWeather() {
+const MET_WMO = {
+  clearsky: 0, fair: 1, partlycloudy: 2, cloudy: 3,
+  lightdrizzle: 51, drizzle: 53, heavydrizzle: 55, lightfreezingdrizzle: 51, freezingdrizzle: 53,
+  lightrain: 61, rain: 63, heavyrain: 65, lightfreezingrain: 66, freezingrain: 67, heavyfreezingrain: 67,
+  lightsleet: 56, sleet: 57, heavysleet: 67, lightsnow: 71, snow: 73, heavysnow: 75,
+  lightrainshowers: 80, rainshowers: 81, heavyrainshowers: 82,
+  lightsnowshowers: 85, snowshowers: 85, heavysnowshowers: 86,
+  lightrainandthunder: 95, rainandthunder: 95, heavyrainandthunder: 95,
+  lightsleetandthunder: 95, sleetandthunder: 96, snowandthunder: 96, heavysnowandthunder: 96
+};
+
+function metWmo(code) {
+  const c = String(code || '').replace(/_(day|night)$/, '');
+  return MET_WMO[c] != null ? MET_WMO[c] : 3;
+}
+
+function metSymbol(raw) {
+  const n1 = raw.next_1_hours && raw.next_1_hours.summary && raw.next_1_hours.summary.symbol_code;
+  if (n1) return metWmo(n1);
+  const n6 = raw.next_6_hours && raw.next_6_hours.summary && raw.next_6_hours.summary.symbol_code;
+  if (n6) return metWmo(n6);
+  return 3;
+}
+
+async function weatherOpenMeteo() {
   const cfg = config.weather || {};
   const url = (cfg.url || 'https://api.open-meteo.com/v1/forecast') +
     '?latitude=' + (cfg.latitude ?? 55.7558) +
@@ -155,11 +181,10 @@ async function getWeather() {
     '&hourly=temperature_2m,precipitation_probability,weather_code,wind_speed_10m' +
     '&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,wind_speed_10m_max,sunrise,sunset' +
     '&timezone=Europe%2FMoscow&forecast_days=2';
-  const res = await fetch(url);
-  if (!res.ok) throw new Error('weather api ' + res.status);
+  const res = await fetch(url, { signal: AbortSignal.timeout(5000) });
+  if (!res.ok) throw new Error('weather open-meteo ' + res.status);
   const raw = await res.json();
 
-  const now = new Date();
   const h = raw.hourly.time.map((t, i) => ({ time: t, t2m: raw.hourly.temperature_2m[i], precip: raw.hourly.precipitation_probability[i], code: raw.hourly.weather_code[i], wind: raw.hourly.wind_speed_10m[i] }));
   let startIdx = h.findIndex(x => x.time >= raw.current.time);
   if (startIdx < 0) startIdx = 0;
@@ -185,17 +210,139 @@ async function getWeather() {
   };
 }
 
+function apparent(t, windKmh) {
+  if (windKmh >= 4.8 && t <= 10) {
+    return Math.round(13.12 + 0.6215 * t - 11.37 * Math.pow(windKmh, 0.16) + 0.3965 * t * Math.pow(windKmh, 0.16));
+  }
+  return t;
+}
+
+async function weatherMetNo() {
+  const cfg = config.weather || {};
+  const lat = cfg.latitude ?? 55.7558;
+  const lon = cfg.longitude ?? 37.6173;
+  const url = 'https://api.met.no/weatherapi/locationforecast/2.0/compact?lat=' + lat + '&lon=' + lon;
+  const res = await fetch(url, {
+    headers: { 'User-Agent': 'kanban-board/1.0 (personal dashboard; +https://github.com/Catboy-manager/Board-assistent-web)' },
+    signal: AbortSignal.timeout(12000)
+  });
+  if (!res.ok) throw new Error('weather met.no ' + res.status);
+  const raw = await res.json();
+  const series = (raw.properties.timeseries || []).slice(0, 96);
+
+  const now = new Date();
+  const hourly = series.map(p => {
+    const det = (p.data.instant && p.data.instant.details) || {};
+    const n1 = (p.data.next_1_hours && p.data.next_1_hours.details) || {};
+    return {
+      time: p.time,
+      t2m: det.air_temperature ?? 0,
+      precip: Math.round((n1.precipitation_amount ?? 0) * 100) / 100,
+      code: metSymbol(p.data),
+      wind: (det.wind_speed ?? 0) * 3.6
+    };
+  });
+  let startIdx = hourly.findIndex(x => x.time >= now.toISOString());
+  if (startIdx < 0) startIdx = 0;
+  const hr = hourly.slice(startIdx, startIdx + 24);
+
+  const cur = series[startIdx] || series[0] || null;
+  const det = (cur && cur.data.instant && cur.data.instant.details) || {};
+  const t = det.air_temperature ?? 0;
+  const ws = (det.wind_speed ?? 0) * 3.6;
+
+  const tzOffsetMs = 3 * 3600 * 1000;
+  const todayStr = new Date(Date.now() + tzOffsetMs).toISOString().slice(0, 10);
+  const tm = new Date(Date.now() + tzOffsetMs + 86400000).toISOString().slice(0, 10);
+  const tomSeries = series.filter(p => p.time.slice(0, 10) === tm).map(p => ({ time: p.time, data: p.data }));
+  const tom = tomSeries.length
+    ? tomSeries.reduce((a, p) => {
+        const d = (p.data.instant && p.data.instant.details) || {};
+        const n1 = (p.data.next_1_hours && p.data.next_1_hours.details) || {};
+        const tmax = a.tmax == null || ((d.air_temperature ?? -99) > a.tmax) ? (d.air_temperature ?? -99) : a.tmax;
+        const tmin = a.tmin == null || ((d.air_temperature ?? 99) < a.tmin) ? (d.air_temperature ?? 99) : a.tmin;
+        const pp = a.pp == null || ((n1.precipitation_amount ?? 0) > a.pp) ? (n1.precipitation_amount ?? 0) : a.pp;
+        const wsx = a.ws == null || ((d.wind_speed ?? 0) > a.ws) ? (d.wind_speed ?? 0) : a.ws;
+        let code = a.code;
+        if (p.time.slice(0, 10) === tm) {
+          const hh = Number(p.time.slice(11, 13));
+          if (hh >= 12 && hh <= 15) code = metSymbol(p.data);
+          if (code == null && hh < 18) code = metSymbol(p.data);
+        }
+        return { tmax, tmin, pp, ws: wsx, code };
+      }, { tmax: null, tmin: null, pp: null, ws: null, code: null })
+    : {};
+
+  return {
+    city: config.cityName || 'Москва',
+    fetchedAt: new Date().toISOString(),
+    provider: 'met.no',
+    current: {
+      weather_code: cur ? metSymbol(cur.data) : 3,
+      temperature_2m: t,
+      relative_humidity_2m: det.relative_humidity ?? 0,
+      apparent_temperature: apparent(t, ws),
+      precipitation: (cur && cur.data.next_1_hours && cur.data.next_1_hours.details && cur.data.next_1_hours.details.precipitation_amount) || 0,
+      wind_speed_10m: Math.round(ws)
+    },
+    hourly: hr,
+    tomorrow: {
+      code: tom.code != null ? tom.code : 3,
+      tmax: tom.tmax != null ? Math.round(tom.tmax) : null,
+      tmin: tom.tmin != null ? Math.round(tom.tmin) : null,
+      precip: tom.pp != null ? Math.round(tom.pp * 100) / 100 : 0,
+      wind: tom.ws != null ? Math.round(tom.ws * 3.6) : 0,
+      sunrise: null,
+      sunset: null
+    }
+  };
+}
+
+function loadWeatherDiskCache() {
+  try {
+    const d = JSON.parse(fs.readFileSync(WEATHER_CACHE_FILE, 'utf8'));
+    if (d && d.data && d.at) return d;
+  } catch (e) { /* ignore */ }
+  return null;
+}
+
+function saveWeatherDiskCache(at, data) {
+  try {
+    fs.writeFileSync(WEATHER_CACHE_FILE, JSON.stringify({ at, data }));
+  } catch (e) { /* ignore */ }
+}
+
+async function getWeather() {
+  const providers = [weatherOpenMeteo, weatherMetNo];
+  let err;
+  for (const fn of providers) {
+    try {
+      return await fn();
+    } catch (e) {
+      err = e;
+    }
+  }
+  throw err || new Error('weather: no providers');
+}
+
 async function weatherHandler(res) {
   try {
-    if (Date.now() - weatherCache.at < 600000 && weatherCache.data) {
+    if (Date.now() - weatherCache.at < WEATHER_TTL && weatherCache.data) {
       return json(res, 200, weatherCache.data);
     }
     const data = await getWeather();
     weatherCache = { at: Date.now(), data };
+    saveWeatherDiskCache(Date.now(), data);
     json(res, 200, data);
   } catch (e) {
     if (weatherCache.data) json(res, 200, Object.assign({ stale: true }, weatherCache.data));
-    else serverError(res, e, 'weather');
+    else {
+      const disk = loadWeatherDiskCache();
+      if (disk) {
+        weatherCache = { at: Date.now(), data: disk.data };
+        json(res, 200, Object.assign({ stale: true }, disk.data));
+      } else serverError(res, e, 'weather');
+    }
   }
 }
 
@@ -868,6 +1015,7 @@ async function handleRequest(req, res) {
       if (p.startsWith('/api/ops')) { if (await ops.handle(p, url, req, res)) return; }
       if (p.startsWith('/api/notify')) { if (await notify.handle(p, url, req, res)) return; }
       if (p.startsWith('/api/gh')) { if (await gh.handle(p, url, req, res)) return; }
+      if (p.startsWith('/api/yt')) { if (await youtube.handle(p, url, req, res)) return; }
       if (p.startsWith('/api/console')) { if (await consoleMod.handle(p, url, req, res)) return; }
       if (req.method === 'GET' && p === '/api/ping') return json(res, 200, { ok: true });
       if (req.method === 'GET' && p === '/api/files') return filesListHandler(req, res, url);
