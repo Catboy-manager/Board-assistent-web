@@ -46,6 +46,7 @@ const messages = require('./messages')({ json, notify });
 const ops = require('./ops')({ dataDir: DATA_DIR, json });
 const gh = require('./gh')({ dataDir: DATA_DIR, json });
 const youtube = require('./youtube')({ dataDir: DATA_DIR, json });
+const smart = require('./smart')({ dataDir: DATA_DIR, readBody, json, cfg: () => config });
 
 const consoleAuth = { key: '' };
 const consoleMod = require('./console')({
@@ -718,6 +719,8 @@ function buildPrompt(messages, cardify) {
   const lastUser = contentText((messages.slice().reverse().find(m => m.role === 'user') || {}).content || '');
   const ctx = assist.getMemoryContext(lastUser);
   if (ctx) sys += '\n\nПостоянная память ассистента (факты о пользователе/проектах):\n' + ctx;
+  const smartCtx = typeof smart.contextSummary === 'function' ? smart.contextSummary() : '';
+  if (smartCtx) sys += smartCtx;
   if (cardify) sys += CARDIFY_RULE;
   return sys + '\n\n' + parts.join('\n') + '\n\nАссистент:';
 }
@@ -1029,6 +1032,7 @@ async function handleRequest(req, res) {
       if (p.startsWith('/api/msgs')) { if (await messages.handle(p, url, req, res)) return; }
       if (p.startsWith('/api/gh')) { if (await gh.handle(p, url, req, res)) return; }
       if (p.startsWith('/api/yt')) { if (await youtube.handle(p, url, req, res)) return; }
+      if (p.startsWith('/api/smart')) { if (await smart.handle(p, url, req, res)) return; }
       if (p.startsWith('/api/console')) { if (await consoleMod.handle(p, url, req, res)) return; }
       if (req.method === 'GET' && p === '/api/ping') return json(res, 200, { ok: true });
       if (req.method === 'GET' && p === '/api/files') return filesListHandler(req, res, url);

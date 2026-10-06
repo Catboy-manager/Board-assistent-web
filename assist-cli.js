@@ -14,8 +14,11 @@
   node assist-cli.js --db <db.json> renamecol "В работе" "Делаю"
   node assist-cli.js --mem <memory.json> remember "Пользователь любит чёрный чай"
   node assist-cli.js --mem <memory.json> forget "чай"
-  node assist-cli.js --rem <reminders.json> remind "Звонок" "+15"
-  node assist-cli.js --rem <reminders.json> remind "Дедлайн" "2026-09-14T09:00:00"
+   node assist-cli.js --rem <reminders.json> remind "Звонок" "+15"
+   node assist-cli.js --rem <reminders.json> remind "Дедлайн" "2026-09-14T09:00:00"
+   node assist-cli.js smart list
+   node assist-cli.js smart on "Лампа" / smart off "Розетка" / smart toggle "Чайник"
+   node assist-cli.js smart scan
 */
 
 const fs = require('fs');
@@ -59,6 +62,45 @@ function uid(p) { return p + Date.now().toString(36) + Math.random().toString(36
 function norm(s) { return String(s || '').toLowerCase().replace(/ё/g, 'е').replace(/\s+/g, ' ').trim(); }
 function done(msg) { console.log('✅ ' + msg); process.exit(0); }
 function fail(msg) { console.log('❌ ' + msg); process.exit(1); }
+
+/* ---------- умный дом (через HTTP к серверу доски) ---------- */
+const http = require('http');
+const https = require('https');
+const srvBase = process.env.KANBAN_URL || ('http://127.0.0.1:' + (process.env.PORT || 8080));
+const smartKey = process.env.KANBAN_SMART_KEY || '';
+
+function api(method, urlPath, body) {
+  return new Promise((resolve, reject) => {
+    let u;
+    try { u = new URL(urlPath, srvBase); } catch (e) { return reject(new Error('некорректный URL сервера: ' + srvBase)); }
+    const payload = body === undefined ? null : Buffer.from(JSON.stringify(body));
+    const headers = {};
+    if (smartKey) headers['x-smart-key'] = smartKey;
+    if (payload) { headers['Content-Type'] = 'application/json'; headers['Content-Length'] = payload.length; }
+    const mod = u.protocol === 'https:' ? https : http;
+    const req = mod.request({
+      hostname: u.hostname, port: u.port || (u.protocol === 'https:' ? 443 : 80),
+      path: u.pathname + u.search, method, headers, rejectUnauthorized: false
+    }, r => {
+      let d = '';
+      r.on('data', c => { d += c; });
+      r.on('end', () => { resolve({ status: r.statusCode, json: null, text: d }); });
+    });
+    req.setTimeout(8000, () => req.destroy(new Error('нет ответа сервера (запущен ли он?)')));
+    req.on('error', reject);
+    if (payload) req.write(payload);
+    req.end();
+  }).then(r => {
+    try { r.json = JSON.parse(r.text); } catch (e) {}
+    return r;
+  });
+}
+
+function smartFail(r) {
+  const e = (r.json && r.json.error) || r.text || ('HTTP ' + r.status);
+  if (r.status === 401) fail('Нужен ключ умного дома: задайте KANBAN_SMART_KEY в окружении сервера и в CLI.');
+  fail('Сервер ответил: ' + String(e).slice(0, 200));
+}
 
 /* ---------- доска ---------- */
 function board() {
@@ -192,6 +234,44 @@ switch (cmd) {
     rems.push({ id: uid('rem_'), text, at, sent: false, ts: new Date().toISOString() });
     save(remPath, rems);
     done('Напоминание на ' + at + ': ' + text);
+    break;
+  }
+  case 'smart': {
+    (async () => {
+      const sub = (args[0] || 'list').toLowerCase();
+      if (sub === 'list') {
+        const r = await api('GET', '/api/smart');
+        if (r.status !== 200) smartFail(r);
+        const devs = (r.json && r.json.devices) || [];
+        if (!devs.length) { console.log('Устройств нет. Запустите: node assist-cli.js smart scan'); process.exit(0); }
+        for (const d of devs) {
+          const st = typeof (d.state || {}).on === 'boolean' ? ((d.state.on) ? 'вкл' : 'выкл') : JSON.stringify(d.state || {});
+          console.log((d.online ? '🟢' : '🔴') + ' ' + d.name + ' [' + d.kind + '/' + d.adapter + '] — ' + st +
+            (d.ip ? ' · ' + d.ip : ''));
+        }
+        process.exit(0);
+      }
+      if (sub === 'scan') {
+        const r = await api('POST', '/api/smart/scan', {});
+        if (r.status !== 202 && r.status !== 409) smartFail(r);
+        console.log(r.status === 202 ? '✅ Сканер локальной сети запущен (см. события на доске)' : '⏳ Сканер уже работает');
+        process.exit(0);
+      }
+      if (sub === 'on' || sub === 'off' || sub === 'toggle' || sub === 'set' || sub === 'say') {
+        const name = (sub === 'set' ? (args[1] || '') : args.slice(1).join(' ')).trim();
+        if (!name) fail('Укажите устройство: smart ' + sub + ' "Название"');
+        let value;
+        let action = sub;
+        if (sub === 'set') {
+          const raw = args.slice(2).join(' ').trim();
+          try { value = JSON.parse(raw || 'null'); } catch (e) { value = raw; }
+        }
+        const r = await api('POST', '/api/smart/cmd', { name, action, value });
+        if (r.status !== 200) smartFail(r);
+        done('Выполнено: ' + name + ' → ' + ((r.json && r.json.stateText) || action));
+      }
+      fail('Неизвестная подкоманда smart: ' + sub + '. Есть: list, scan, on, off, toggle, set, say');
+    })().catch(e => fail(e.message || String(e)));
     break;
   }
   case 'status': {

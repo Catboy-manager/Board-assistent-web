@@ -18,7 +18,7 @@
 - `host` = `process.env.KANBAN_HOST || '127.0.0.1'`; `port` = `process.env.KANBAN_PORT || PORT || config.port || 8080`
 - `fs.mkdirSync(DATA_DIR)` перед первым `saveDb()`
 
-При любой правке общего веб-кода синхронизировать в `linux/app/` и `windows/app/app/`: `server.js`, `movies.js`, `news.js`, `games.js`, `messages.js`, `youtube.js`, `assist.js`, `assist-cli.js`, `ai-opencode.json`, `stt/stt.py`, `public/*` (включая `public/js/movies.js`, `news.js`, `games.js`, `msgs.js`, `youtube.js`, `interests.js`), `telegram-bot.js`; затем пересобрать AppImage.
+При любой правке общего веб-кода синхронизировать в `linux/app/` и `windows/app/app/`: `server.js`, `movies.js`, `news.js`, `games.js`, `messages.js`, `youtube.js`, `smart.js`, `assist.js`, `assist-cli.js`, `ai-opencode.json`, `stt/stt.py`, `public/*` (включая `public/js/movies.js`, `news.js`, `games.js`, `msgs.js`, `youtube.js`, `interests.js`, `smart.js`), `telegram-bot.js`; затем пересобрать AppImage. Синк-скрипт: `/tmp/opencode/sync-desktop.py` (копирует файлы + патчит 3 вставки в desktop `server.js`); после него `diff web/server.js linux/app/server.js` должен показывать только строку `sslPort`.
 
 ## Глобальный зум интерфейса (`document.documentElement.style.zoom`)
 
@@ -37,6 +37,21 @@
 Из этого следует: `CANVAS.toCanvas()` переводит клиентские координаты в layout доски, `visible()/safeTop()/safeRight()` возвращают layout-границы (учитывают топбар и правую ИИ-панель), а любая новая фиксированная панель с правым/нижним якорем обязана использовать `var(--zvw)/var(--zvh)` вместо `100vw/100dvh`.
 
 Регрессия зума: `/tmp/opencode/zoom-test.js` (свой CDP-клиент `/tmp/opencode/cdp.js`, без Playwright) — 47 проверок: якорь под курсором, персистентность, fixed-топбар, drag колонки/плитки и resize плитки/ИИ-панели на z=0.5…2, `safeTop/safeRight`, отсутствие JS-ошибок.
+
+## Умный дом (этап 1, модуль `smart.js`)
+
+Локальная автоматизация без облаков: опрос → diff → событие → сценарии. Источник события может быть любым (опрос, вебхук, команда), контракт сценариев не меняется.
+
+- **Модуль:** `smart.js` подключается как `require('./smart')({ dataDir, readBody, json, cfg })`; в `server.js` три вставки — require после `youtube`, роут `/api/smart` после `/api/yt`, `smart.contextSummary()` в `buildPrompt`. Модуль обязан вернуть truthy из `handle()` (сам пишет ответ через `json(res,…)`).
+- **Состояние:** `data/smart.json` — только последнее состояние (`devices/scenes/poll/hosts/scanAt`); история не хранится. События — кольцо в памяти (100 шт.), не персистятся.
+- **Адаптеры:** `manual`, `webhook`, `http` (HTTP-мост через `meta.cmdUrl`/`meta.pollUrl`) — работают; `glagol`, `tuya`, `voice`, `mqtt` — стабы, отвечают 501 с подсказкой (этапы 2–3). Новый адаптер = функция `{ poll, cmd, stub }` в `ADAPTERS`.
+- **Опрос:** `POST /api/smart/poll {enabled, interval}` (clamp ≥ 2000 мс) → `tick()` каждый интервал; диф состояния → `emit(state)` → `runScenes()`; упавший мост/таймаут → `online:false` + событие `offline`.
+- **Сцены:** триггер `state` (операции `change/eq/ne/gt/lt/rise/fall`) и `time` (`HH:MM`, проверяется по таймеру); защита от петли — `busyScenes` (Set в памяти, НЕ в JSON — иначе сцена «зависает» навсегда) + cooldown 60 с.
+- **Скан LAN:** `POST /api/smart/scan` → ping-sweep (64 параллельно) → TCP-пробы `PORTS` → `httpBrief` + `fingerprint` → `neighMap()` (MAC из `ip -o neigh`). Прогресс/SSE: `stage:'ping'|'tcp'`. Живые хосты без портов тоже попадают в `hosts` (`alive:true, ports:[]`). Маска сети берётся из `netmask` (`prefixOf`), link-local `169.254.x` пропускается.
+- **Безопасность:** `KANBAN_SMART_KEY` (env или `config.smart.key`) → все POST требуют `x-smart-key`/`?key=`; ключа нет → только приватные IP (`isPrivateIp`). GET всегда открыт. В UI ключ вводится в панели, хранится в `localStorage['kban-smart-key']`, в CLI — `KANBAN_SMART_KEY`.
+- **UI:** панель в `#panels-right` (`#smart-panel`/`#sp-smart`), файл `public/js/smart.js` (`window.SMART.load`), плитка 🏠 в каталоге (см. `place.js`), стили `.sm-*` в конце `style.css` (инпуты — через `.sm-pane input.sm-in` из-за специфичности `input[type=text]`).
+- **CLI/ИИ:** `node assist-cli.js smart list|scan|on|off|toggle|set|say` (HTTP к серверу, см. `api()` в `assist-cli.js`); в промпт ИИ `contextSummary()` подставляет устройства и команды.
+- **Тест:** `/tmp/opencode/smart-test.js` — 29 проверок (API, SSE, HTTP-мост, сцены, скан реальной LAN). Запуск: `node /tmp/opencode/smart-test.js`.
 
 ## Ключевые команды и сервис
 
@@ -57,6 +72,7 @@
 - `/api/games` GET (Steam + сторонние, постеры) · `/api/games/refresh` POST · `/api/games/config` POST {steamId,apiKey} · `/api/games/third` POST (добавить стороннюю игру) — модуль `games.js`, UI `/js/games.js`
 - `/api/msgs` GET — статистика уведомлений (всего, активных дней, в день, последние) — модуль `messages.js`
 - `/api/yt/search?q=…` · `/api/yt/info?id=…` · `/api/yt/stream?id=…` · `/api/yt/thumb?id=…` · `/api/yt/auth/status|cookies|browser|clear` · `/api/yt/watch` POST · `/api/yt/watch/clear` POST · `/api/yt/interests` GET — модуль `youtube.js`, UI `/js/youtube.js` + `/js/interests.js` (требует сети; поиск может отдавать 502 при недоступном upstream)
+- `/api/smart` GET (устройства/сцены/hosts/события) · `/api/smart/events` SSE · `POST /api/smart/{scan,cmd,device,poll,scene,webhook/:id}` · `POST /api/smart/device/:id/{delete,update}` · `POST /api/smart/scene/:id/{delete,toggle,run}` — модуль `smart.js`, UI `/js/smart.js` (см. раздел «Умный дом»)
 
 ## Прогресс реализации (checklist)
 
@@ -75,6 +91,7 @@
 - [x] **Статистика сообщений:** вкладка 📨 — сколько уведомлений пришло, активных дней, в день (сводка из `notify`)
 - [x] **YouTube:** вкладка ▶ — поиск, постер, стрим с сервера (yt-dlp), авторизация (cookies/браузер), история просмотра и подборки по интересам (`/js/interests.js`)
 - [x] **Глобальный зум интерфейса:** Ctrl+колесо, кнопки `−/1:1/+`, сохранение в `localStorage`, корректные drag/resize под любым зумом, координатная модель и регрессия (см. раздел выше)
+- [x] **Умный дом, этап 1:** LAN-скан (ping + TCP + fingerprint), устройства с последним состоянием, опрос → diff → события (SSE), сценарии, панель UI, CLI для ИИ, ключ `KANBAN_SMART_KEY` (см. раздел выше). Этап 2 — Glagol-адаптер станции (локальный WS), этап 3 — Tuya/Yandex cloud/голос
 
 ## Оптимизации и заметки
 
