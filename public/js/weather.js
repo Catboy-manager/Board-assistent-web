@@ -48,15 +48,16 @@
 
   function openPopup(d) {
     const rect = document.getElementById('weather').getBoundingClientRect();
+    const z = window.CANVAS && window.CANVAS.scale ? window.CANVAS.scale() : 1;
     let pop = document.getElementById('weather-pop');
     if (!pop) {
       pop = document.createElement('div');
       pop.id = 'weather-pop';
-      pop.style.cssText = 'position:fixed;z-index:150;background:#10151c;border:1px solid #ffffff22;border-radius:12px;padding:4px 12px 14px;box-shadow:0 10px 30px #00000066;max-width:92vw;width:420px;';
+      pop.style.cssText = 'position:fixed;z-index:150;background:#10151c;border:1px solid #ffffff22;border-radius:12px;padding:4px 12px 14px;box-shadow:0 10px 30px #00000066;width:min(420px, calc(92 * var(--zvw) / 100));';
       document.body.appendChild(pop);
       document.addEventListener('click', (e) => { if (pop && !pop.contains(e.target) && e.target.id !== 'weather') pop.style.display = 'none'; });
     }
-    pop.style.top = (rect.bottom + 8) + 'px';
+    pop.style.top = (rect.bottom / z + 8) + 'px';
     pop.style.left = 'auto';
     pop.style.right = '10px';
     pop.style.display = 'block';

@@ -8,6 +8,7 @@
   }
 
   const st = { s: 1 };
+  let zoomPctEl = null;
 
   function scroll() {
     return { x: window.scrollX || 0, y: window.scrollY || 0 };
@@ -20,6 +21,7 @@
   document.addEventListener('DOMContentLoaded', function () {
     const world = document.getElementById('world');
     if (!world) return;
+    zoomPctEl = document.getElementById('zoom-pct');
 
     try {
       const d = JSON.parse(localStorage.getItem(KEY) || '{}');
@@ -31,9 +33,16 @@
     }
 
     function apply() {
-      world.style.transform = 'scale(' + st.s + ')';
+      document.documentElement.style.zoom = String(st.s);
+      document.documentElement.style.setProperty('--z', String(st.s));
+      if (zoomPctEl) zoomPctEl.textContent = Math.round(st.s * 100) + '%';
     }
     apply();
+
+    /* Масштаб: геометрия доски живёт в layout-пикселях (offsetLeft, style.left,
+       scrollWidth), а rect/clientX/scrollX браузер отдаёт в визуальных.
+       Всё, что уходит в offset-параметры и style, переводим через scale(). */
+    function scale() { return st.s; }
 
     function toCanvas(cx, cy) {
       const sc = scroll();
@@ -41,10 +50,11 @@
     }
 
     function zoomAt(clientX, clientY, factor) {
-      const sc = scroll();
       const pc = toCanvas(clientX, clientY);
-      st.s = clampS(st.s * factor);
-      scrollTo(pc.cx * st.s - clientX, pc.cy * st.s - clientY);
+      const ns = clampS(st.s * factor);
+      st.s = ns;
+      /* scrollTo ждёт визуальные пиксели, pc — layout */
+      scrollTo(pc.cx * ns - clientX, pc.cy * ns - clientY);
       apply();
       save();
     }
@@ -68,25 +78,26 @@
 
     function safeTop() {
       const tb = document.getElementById('topbar');
-      const h = tb ? tb.getBoundingClientRect().height : 65;
-      return Math.ceil((h + 6 + (window.scrollY || 0)) / st.s);
+      const h = tb ? tb.getBoundingClientRect().height / st.s : 65;
+      return Math.ceil(h + 6 + (window.scrollY || 0) / st.s);
     }
 
     function safeRight() {
-      const w = window.innerWidth || 0;
+      const w = (window.innerWidth || 0) / st.s;
       let dock = 0;
-      if (w >= 1000) {
+      if (window.innerWidth >= 1000) {
         const av = getComputedStyle(document.documentElement).getPropertyValue('--ai-w');
         const m = /(-?[\d.]+)px/.exec(av || '');
         if (m) dock = parseFloat(m[1]);
       }
-      return Math.ceil((w - dock + (window.scrollX || 0)) / st.s);
+      return Math.ceil(w - dock + (window.scrollX || 0) / st.s);
     }
 
     window.CANVAS = {
       view: function () { return { s: st.s, x: 0, y: 0 }; },
       zoomAt: zoomAt,
       reset: reset,
+      scale: scale,
       toCanvas: toCanvas,
       visible: visible,
       safeTop: safeTop,
@@ -108,12 +119,23 @@
       });
     }
 
-    world.addEventListener('wheel', function (e) {
-      if (e.ctrlKey || e.metaKey) {
-        e.preventDefault();
-        zoomAt(e.clientX, e.clientY, e.deltaY < 0 ? 1.12 : 1 / 1.12);
-      }
-    }, { passive: false });
+    /* Ctrl/⌘+колесо — зум в любой точке приложения (не только над доской),
+       иначе над топбаром и панелями срабатывает зум самого браузера. */
+    document.addEventListener('wheel', function (e) {
+      if (!e.ctrlKey && !e.metaKey) return;
+      if (e.target && e.target.closest && e.target.closest('.no-zoom')) return;
+      e.preventDefault();
+      zoomAt(e.clientX, e.clientY, e.deltaY < 0 ? 1.12 : 1 / 1.12);
+    }, { passive: false, capture: true });
+
+    document.addEventListener('keydown', function (e) {
+      if (!e.ctrlKey && !e.metaKey) return;
+      const cx = window.innerWidth / 2;
+      const cy = window.innerHeight / 2;
+      if (e.key === '0') { e.preventDefault(); reset(); }
+      else if (e.key === '=' || e.key === '+') { e.preventDefault(); zoomAt(cx, cy, 1.25); }
+      else if (e.key === '-' || e.key === '_') { e.preventDefault(); zoomAt(cx, cy, 1 / 1.25); }
+    });
 
     const pan = { on: false, px: 0, py: 0, sx: 0, sy: 0, id: null };
 

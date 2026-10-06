@@ -185,16 +185,21 @@ module.exports = (deps) => {
     return s;
   }
 
-  async function findPosterWiki(title) {
+  async function findPosterWiki(title, exclude) {
     const hasCyrillic = /[а-яё]/i.test(title);
     const langs = hasCyrillic ? ['ru', 'en'] : ['en', 'ru'];
     const cands = [];
+    const push = arr => {
+      for (const c of arr) {
+        if (!(exclude && exclude.has(c.url))) cands.push(c);
+      }
+    };
     for (const lang of langs) {
       try {
-        cands.push(...(await wikiExact(lang, title)).map(c => Object.assign(c, { lang })));
+        push((await wikiExact(lang, title)).map(c => Object.assign(c, { lang })));
       } catch (e) {}
       try {
-        cands.push(...(await wikiSearch(lang, title)).map(c => Object.assign(c, { lang })));
+        push((await wikiSearch(lang, title)).map(c => Object.assign(c, { lang })));
       } catch (e) {}
     }
     if (!cands.length) return '';
@@ -202,16 +207,45 @@ module.exports = (deps) => {
     return cands[0].url;
   }
 
-  const GOOD_HOSTS = [
-    'm.media-amazon.com', 'image.tmdb.org', 'upload.wikimedia.org', 'kinopoisk.ru',
-    'st.kp.yandex.net', 'kongu.ee', 'kinorium.com', 'images.kinorium.com', 'film.ru'
+  // Приоритет: официальные дистрибьюторы (Кинопоиск, Netflix, OKKO, ivi, Amediateka, KION…)
+  // → базы постеров (TMDB, Amazon/Prime/IMDb CDN, Kinorium…) → Wikipedia → общий веб.
+  const OFFICIAL = [
+    'st.kp.yandex.net', 'kinopoisk', 'kp.ru',
+    'okko', 'ivi', 'amediateka', 'kion', 'netflix',
+    'premier.one', 'thumbs.start.ru', 'wink', 'more.tv', 'megogo'
   ];
+  const GOOD_HOSTS = [
+    'm.media-amazon.com', 'image.tmdb.org', 'upload.wikimedia.org',
+    'kinopoisk.ru', 'st.kp.yandex.net', 'kongu.ee',
+    'kinorium.com', 'images.kinorium.com', 'film.ru',
+    'okko', 'ivi', 'amediateka', 'kion', 'netflix', 'premier.one', 'thumbs.start.ru', 'wink', 'megogo'
+  ];
+
+  function hostOf(u) {
+    try { return new URL(u).hostname; } catch (e) { return ''; }
+  }
+  function tierOf(u) {
+    const h = hostOf(u);
+    if (OFFICIAL.some(t => h.includes(t))) return 2;
+    return GOOD_HOSTS.some(t => h.includes(t)) ? 1 : 0;
+  }
+  function pickBest(urls, exclude, excludeHost) {
+    const others = excludeHost ? urls.filter(u => hostOf(u) !== excludeHost) : urls.slice();
+    const pool = (others.length ? others : urls).filter(u => !(exclude && exclude.has(u)));
+    let best = null, bs = -1;
+    for (const u of pool) {
+      let s = tierOf(u) * 100;
+      if (/poster|обложк|cover|постер|огг|poster_/i.test(u)) s += 10;
+      if (s > bs) { bs = s; best = u; }
+    }
+    return best;
+  }
 
   /* ---- поиск постера через Bing Images (fallback; берём только заведомо постерные CDN) ---- */
 
-  async function findPosterBing(title) {
+  async function findPosterBing(title, exclude, excludeHost) {
     const queries = [
-      title + ' постер фильм', title + ' poster movie', title + ' фильм постер'
+      title + ' постер фильм', title + ' poster movie', title + ' постер смотреть'
     ];
     for (const q of queries) {
       const html = await fetchText('https://www.bing.com/images/search?q=' + encodeURIComponent(q) + '&qft=+filterui:imagesize-large');
@@ -219,30 +253,33 @@ module.exports = (deps) => {
       const urls = [];
       const re = /&quot;murl&quot;:&quot;(https?:\/\/[^&"]+)/g;
       let mm;
-      while ((mm = re.exec(html)) && urls.length < 15) {
+      while ((mm = re.exec(html)) && urls.length < 20) {
         const u = mm[1].replace(/\\u002[fF]|\\\//g, '/').trim();
         if (isRaster(u) && u.length < 300) urls.push(u);
       }
-      const good = urls.filter(u => GOOD_HOSTS.some(h => u.includes(h)));
-      if (good.length) {
-        return good.find(u => /poster/i.test(u)) || good[0];
-      }
+      const known = urls.filter(u => { const h = hostOf(u); return OFFICIAL.some(t => h.includes(t)) || GOOD_HOSTS.some(t => h.includes(t)); });
+      const best = pickBest(known, exclude, excludeHost);
+      if (best) return best;
     }
     return '';
   }
 
-  async function resolveMovie(m) {
-    if (!m || busy.has(m.id) || m.poster) return;
+  async function resolveMovie(m, opts) {
+    const alt = !!(opts && opts.alt);
+    if (!m || busy.has(m.id)) return;
+    if (!alt && m.poster) return;
     busy.add(m.id);
     try {
       let poster = '';
-      // 1) Wikipedia (без ключа, надёжно)
-      try { poster = String(await findPosterWiki(m.title) || '').trim(); } catch (e) {}
-      // 2) Bing-картинки
-      if (!poster) { try { poster = await findPosterBing(m.title); } catch (e) {} }
+      let found = '';
+      const exclude = alt && m.poster ? new Set([m.poster]) : null;
+      // 1) официальные дистрибьюторы и базы постеров (Кинопоиск / Netflix / OKKO / ivi / TMDB / Amazon)
+      try { poster = await findPosterBing(m.title, exclude, alt && m.poster ? hostOf(m.poster) : null); found = 'bing'; } catch (e) {}
+      // 2) Wikipedia (без ключа, надёжно)
+      if (!poster) { try { poster = String(await findPosterWiki(m.title, exclude) || '').trim(); found = 'wiki'; } catch (e) {} }
       // 3) ИИ (последняя попытка; free-tier big-pickle может быть недоступен извне opencode)
-      if (!poster && aiResolve) { try { poster = String(await aiResolve(m.title) || '').trim(); } catch (e) {} }
-      if (poster && /^https?:\/\//i.test(poster)) { m.poster = poster; save(); }
+      if (!poster && aiResolve) { try { poster = String(await aiResolve(m.title) || '').trim(); found = 'ai'; } catch (e) {} }
+      if (poster && /^https?:\/\//i.test(poster) && (!exclude || !exclude.has(poster)) && (found !== 'bing' || tierOf(poster) > 0)) { m.poster = poster; save(); }
     } finally {
       busy.delete(m.id);
     }
@@ -265,8 +302,8 @@ module.exports = (deps) => {
 
   async function findPosterAny(title) {
     let url = '';
-    try { url = await findPosterWiki(title); } catch (e) {}
-    if (!url) { try { url = await findPosterBing(title); } catch (e) {} }
+    try { url = await findPosterBing(title); } catch (e) {}
+    if (!url) { try { url = await findPosterWiki(title); } catch (e) {} }
     return url;
   }
 
@@ -300,7 +337,7 @@ module.exports = (deps) => {
       if (!mv) return json(res, 404, { error: 'фильм не найден' });
       if (m2[2] === 'toggle') { mv.watched = !mv.watched; save(); return json(res, 200, { movie: mv }); }
       if (m2[2] === 'delete') { store.movies = store.movies.filter(x => x.id !== mv.id); save(); return json(res, 200, { ok: true }); }
-      if (m2[2] === 'resolve') { resolveMovie(mv); return json(res, 200, { movie: mv, queued: true }); }
+      if (m2[2] === 'resolve') { const alt = url.searchParams.get('alt') === '1'; resolveMovie(mv, { alt }); return json(res, 200, { movie: mv, queued: true }); }
     }
 
     return false;

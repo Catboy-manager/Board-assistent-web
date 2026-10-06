@@ -29,9 +29,21 @@
 
   let rendered = false;
 
+  /* Приватность: банковские SMS и платёжные уведомления не показываем */
+  const PRIVACY_APP_RE = /сбер|тиньк|tinkoff|втб|альфа|alfa|райф|совком|газпром|открытие|сбп|юмани|yoomoney|киви|qiwi|банк|bank|вклад|депозит|хоум|кредитн|мобил\w{0,4}\s*банк/i;
+  const PRIVACY_TEXT_RE = /сбер|тиньк|tinkoff|\bвтб|альфа|alfa|райф|совком|газпром|открытие|сбп|юмани|yoomoney|киви|qiwi|банк|bank|вклад|депозит|карт|счет|счёт|плат[её]ж|оплат|списан|зачислен|перевод|транзак|квитанци|смс-?код|код подтверждени|подтверждени\w{0,12}(перевода|операци|плат[её]жа)|покупк|заблокирован|баланс|остаток|purchase|payment|transfer|credited|debited|paid|\d[\d\s]{2,}\s?(₽|руб(лей)?\.?|rub|₴|\$|usd|eur|euro)/i;
+
+  function isPrivate(item) {
+    if (!item) return false;
+    const app = String(item.app || '').trim();
+    const s = app + ' ' + String(item.title || '') + ' ' + String(item.text || '');
+    return PRIVACY_APP_RE.test(app) || PRIVACY_TEXT_RE.test(s);
+  }
+
   function renderAll(items) {
     const box = $('sw-notif');
     if (!box) return;
+    items = (items || []).filter(it => !isPrivate(it));
     if (!items || !items.length) {
       box.innerHTML = '<div class="empty-state">Уведомлений пока нет</div>';
       return;
@@ -44,6 +56,7 @@
         </div>
         ${it.title ? `<div class="nf-title">${esc(it.title)}</div>` : ''}
         ${it.text ? `<div class="nf-text">${esc(it.text)}</div>` : ''}
+        ${(it.user || it.chat) ? `<div class="nf-who">👤 ${esc(it.user || '—')}${it.chat ? ' · 💬 ' + esc(it.chat) : ''}</div>` : ''}
       </div>`).join('');
     box.scrollTop = 0;
   }
@@ -75,6 +88,7 @@
         let d; try { d = JSON.parse(ev.data); } catch (e) { return; }
         if (d.type !== 'phone' || !d.item) return;
         const it = d.item;
+        if (isPrivate(it)) return;
         if (d.replay) { pushLive(it); return; }
         const title = '🔔 ' + (it.app || 'Телефон') + (it.title ? ': ' + it.title : '');
         toast(title, it.text || '');

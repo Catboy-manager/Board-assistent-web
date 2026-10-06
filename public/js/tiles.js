@@ -145,15 +145,22 @@
     });
   }
 
+  /* rect/clientX браузер отдаёт в визуальных пикселях, а grid.clientWidth и
+     style.height — в layout. Поэтому всё, что измеряем через rect, делим на scale. */
+  function zscale() {
+    return window.CANVAS && window.CANVAS.scale ? window.CANVAS.scale() : 1;
+  }
+
   function collectSizes() {
     const grid = gridOf();
     if (!grid) return;
     const total = grid.clientWidth;
     if (!total) return;
+    const z = zscale();
     grid.querySelectorAll('.sw-tile').forEach(t => {
       const id = t.getAttribute('data-tile');
-      const w = t.getBoundingClientRect().width / total;
-      const h = t.getBoundingClientRect().height;
+      const w = t.getBoundingClientRect().width / z / total;
+      const h = t.getBoundingClientRect().height / z;
       state.sizes[id] = { w, h };
     });
   }
@@ -200,15 +207,18 @@
 
   function resizeStart(tile, id) {
     const h = resizeHandle(tile, id);
+    const z = zscale();
     const start = {
-      x: 0, y: 0, w: tile.getBoundingClientRect().width, ht: tile.getBoundingClientRect().height
+      x: 0, y: 0,
+      w: tile.getBoundingClientRect().width / z,
+      ht: tile.getBoundingClientRect().height / z
     };
     return function (e) {
       start.x = e.clientX; start.y = e.clientY;
       const move = evt => {
-        const dx = (evt.clientX - start.x) / h.gapBase;
+        const dx = (evt.clientX - start.x) / z / h.gapBase;
         const span = Math.min(h.col, Math.max(1, Math.round(start.w / h.gapBase + dx)));
-        const dy = Math.max(80, start.ht + (evt.clientY - start.y));
+        const dy = Math.max(80, start.ht + (evt.clientY - start.y) / z);
         tile.style.gridColumn = 'span ' + span;
         tile.style.height = dy + 'px';
       };

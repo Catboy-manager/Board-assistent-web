@@ -18,7 +18,9 @@
     { id: 'ops',     icon: '📡', title: 'Трансляция', def: { w: 340, h: 240 } },
     { id: 'stats',   icon: '📊', title: 'Сервер',   def: { w: 300, h: 300 } },
     { id: 'yt',      icon: '▶', title: 'YouTube',   def: { w: 360, h: 380 } },
-    { id: 'interests', icon: '🧠', title: 'Интересы', def: { w: 340, h: 400 } }
+    { id: 'interests', icon: '🧠', title: 'Интересы', def: { w: 340, h: 400 } },
+    { id: 'games',   icon: '🎮', title: 'Игры',     def: { w: 420, h: 480 } },
+    { id: 'msgs',    icon: '🗨', title: 'Сообщения', def: { w: 380, h: 420 } }
   ];
 
   let layout = {};
@@ -31,6 +33,8 @@
     if (id === 'stats') return 'stats-panel';
     if (id === 'yt') return 'yt-panel';
     if (id === 'interests') return 'interests-panel';
+    if (id === 'games') return 'games-panel';
+    if (id === 'msgs') return 'msgs-panel';
     return 'side-widget';
   }
   function itemOf(id) { return ITEMS.find(i => i.id === id); }
@@ -41,6 +45,8 @@
     if (id === 'stats') return 'sp-stats';
     if (id === 'yt') return 'sp-yt';
     if (id === 'interests') return 'sp-interests';
+    if (id === 'games') return 'sp-games';
+    if (id === 'msgs') return 'sp-msgs';
     return 'sw-' + id;
   }
   function loaderOf(id) {
@@ -53,6 +59,8 @@
     if (id === 'stats') return () => window.STATS && window.STATS.load();
     if (id === 'yt') return () => window.YT && window.YT.load();
     if (id === 'interests') return () => window.INT && window.INT.load();
+    if (id === 'games') return () => window.GAMES && window.GAMES.load();
+    if (id === 'msgs') return () => window.MSGS && window.MSGS.load();
     return () => window.MOVIES && window.MOVIES.load();
   }
   const snap = v => Math.round(v / SNAP) * SNAP;
@@ -186,12 +194,14 @@
   }
 
   function syncPanelVisibility() {
-    const opEl = $('ops-panel'), stEl = $('stats-panel'), sysEl = $('sys-panel'), ytEl = $('yt-panel'), intEl = $('interests-panel');
+    const opEl = $('ops-panel'), stEl = $('stats-panel'), sysEl = $('sys-panel'), ytEl = $('yt-panel'), intEl = $('interests-panel'), gEl = $('games-panel'), mEl = $('msgs-panel');
     if (opEl) opEl.classList.toggle('hidden', !!layout.ops);
     if (stEl) stEl.classList.toggle('hidden', !!layout.stats);
     if (sysEl) sysEl.classList.toggle('hidden', !!(layout.gh && layout.console));
     if (ytEl) ytEl.classList.toggle('hidden', !!layout.yt);
     if (intEl) intEl.classList.toggle('hidden', !!layout.interests);
+    if (gEl) gEl.classList.toggle('hidden', !!layout.games);
+    if (mEl) mEl.classList.toggle('hidden', !!layout.msgs);
   }
 
   function sysTabOff(id) {
@@ -245,6 +255,8 @@
     if (!it) return;
     const box = boardBox();
     if (layout[id]) {
+      const pl0 = $('palette');
+      if (pl0) pl0.classList.remove('open');
       activateTile(id);
       return;
     }
@@ -306,6 +318,8 @@
 
     const fn = loaderOf(id);
     if (fn) try { fn(); } catch (e) {}
+    const pl = $('palette');
+    if (pl) pl.classList.remove('open');
     save();
     syncPanelVisibility();
   }

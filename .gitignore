@@ -10,3 +10,6 @@ stt/model-ru.zip
 *.onnx
 *.onnx.json
 tts/
+*.bak
+*.bak.*
+*.replaybak

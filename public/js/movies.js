@@ -73,6 +73,8 @@
       it.querySelector('[data-mv-del]').onclick = (e) => { e.stopPropagation(); del(id); };
       const rbtn = it.querySelector('[data-mv-resolve]');
       if (rbtn) rbtn.onclick = (e) => { e.stopPropagation(); resolveOne(id); };
+      const abtn = it.querySelector('[data-mv-alt]');
+      if (abtn) abtn.onclick = (e) => { e.stopPropagation(); resolveOne(id, true); };
       it.onclick = () => openDetail(id);
       const img = it.querySelector('.mv-post[data-ph]');
       if (img) img.onerror = () => {
@@ -95,7 +97,7 @@
         : `<div class="mv-post mv-ph" title="Нажмите, чтобы открыть">${ph}</div>`}
       <div class="mv-body">
         <div class="mv-title">${esc(m.title)}</div>
-        <div class="mv-act">${m.poster ? '' : '<button class="mv-btn" data-mv-resolve title="Найти постер">🖼</button>'}
+        <div class="mv-act">${m.poster ? '<button class="mv-btn" data-mv-alt title="Найти альтернативный постер">🖼</button>' : '<button class="mv-btn" data-mv-resolve title="Найти постер">🖼</button>'}
           <button class="mv-btn" data-mv-watch title="${m.poster ? 'Детали и просмотр' : 'Просмотрено'}">${m.poster ? '👁' : '☑'}</button>
           <button class="mv-btn danger" data-mv-del title="Удалить">✕</button>
         </div>
@@ -126,9 +128,9 @@
     if (!confirm('Удалить «' + ((list.find(x => x.id === id) || {}).title || '') + '»?')) return;
     try { await fetch('/api/movies/' + id + '/delete', { method: 'POST' }); await load(); } catch (e) {}
   }
-  async function resolveOne(id) {
+  async function resolveOne(id, alt) {
     try {
-      const r = await fetch('/api/movies/' + id + '/resolve', { method: 'POST' });
+      const r = await fetch('/api/movies/' + id + '/resolve' + (alt ? '?alt=1' : ''), { method: 'POST' });
       const d = await r.json();
       if (d && d.queued) { busyposter++; setTimeout(async () => { busyposter--; await load(); }, 9000); }
     } catch (e) {}
@@ -159,7 +161,8 @@
       <div class="modal-head"><h3>${esc(m.title)}</h3><button class="close-btn" data-close-modal>✕</button></div>
       <div class="modal-body mv-detail">
         ${m.poster
-          ? `<div class="mv-full"><img src="${m.poster}" alt="${esc(m.title)}" onclick="this.classList.toggle('big')"><div class="hint">клик по постеру — увеличить/уменьшить</div></div>`
+          ? `<div class="mv-full"><img src="${m.poster}" alt="${esc(m.title)}" onclick="this.classList.toggle('big')"><div class="hint">клик по постеру — увеличить/уменьшить</div>
+            <div class="mv-watch" style="justify-content:center;margin-top:8px"><button class="btn" id="mv-d-alt">🖼 Альтернативный постер</button></div></div>`
           : `<div class="empty-state">Постер ещё не найден<br><button class="btn" id="mv-d-resolve">🖼 Найти</button></div>`}
         <label>Смотреть:</label>
         <div class="mv-watch">${links}</div>
@@ -171,6 +174,8 @@
     if (d) d.onclick = () => toggle(id, m);
     const dr = $('mv-d-resolve');
     if (dr) dr.onclick = async () => { await fetch('/api/movies/' + id + '/resolve', { method: 'POST' }); dr.textContent = '⏳ Ищем…'; dr.disabled = true; setTimeout(() => { try { window.APP.closeModal(); } catch (e) {} load(); }, 9000); };
+    const da = $('mv-d-alt');
+    if (da) da.onclick = async () => { await fetch('/api/movies/' + id + '/resolve?alt=1', { method: 'POST' }); da.textContent = '⏳ Ищем…'; da.disabled = true; setTimeout(() => { try { window.APP.closeModal(); } catch (e) {} load(); }, 9000); };
   }
 
   document.addEventListener('DOMContentLoaded', () => {

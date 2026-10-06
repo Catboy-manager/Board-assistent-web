@@ -30,9 +30,19 @@ async function resolveMoviePoster(title) {
 }
 
 const movies = require('./movies')({ dataDir: DATA_DIR, readBody, json, aiResolve: resolveMoviePoster });
+const games = require('./games')({
+  dataDir: DATA_DIR,
+  readBody,
+  json,
+  findPoster: (t) => (typeof movies.findPosterFor === 'function' ? movies.findPosterFor(t) : ''),
+  aiResolve: resolveMoviePoster,
+  cfg: () => config,
+  saveCfg: saveConfig
+});
 const news = require('./news')({ dataDir: DATA_DIR, readBody, json });
 const music = require('./music')({ dataDir: DATA_DIR, json });
 const notify = require('./notify')({ dataDir: DATA_DIR, json });
+const messages = require('./messages')({ json, notify });
 const ops = require('./ops')({ dataDir: DATA_DIR, json });
 const gh = require('./gh')({ dataDir: DATA_DIR, json });
 const youtube = require('./youtube')({ dataDir: DATA_DIR, json });
@@ -1011,10 +1021,12 @@ async function handleRequest(req, res) {
       if (p.startsWith('/api/ai/chat') && req.method === 'POST') return await aiChatHandler(req, res, JSON.parse((await readBody(req)).toString() || '{}'));
       if (p.startsWith('/api/config')) return configHandler(req, res, req.method === 'GET' ? null : (JSON.parse((await readBody(req)).toString() || '{}')));
       if (p.startsWith('/api/movies')) { if (await movies.handle(p, url, req, res)) return; }
+      if (p.startsWith('/api/games')) { if (await games.handle(p, url, req, res)) return; }
       if (p.startsWith('/api/news')) { if (await news.handle(p, url, req, res)) return; }
       if (p.startsWith('/api/music')) { if (await music.handle(p, url, req, res)) return; }
       if (p.startsWith('/api/ops')) { if (await ops.handle(p, url, req, res)) return; }
       if (p.startsWith('/api/notify')) { if (await notify.handle(p, url, req, res)) return; }
+      if (p.startsWith('/api/msgs')) { if (await messages.handle(p, url, req, res)) return; }
       if (p.startsWith('/api/gh')) { if (await gh.handle(p, url, req, res)) return; }
       if (p.startsWith('/api/yt')) { if (await youtube.handle(p, url, req, res)) return; }
       if (p.startsWith('/api/console')) { if (await consoleMod.handle(p, url, req, res)) return; }
@@ -1078,7 +1090,7 @@ function lanIPs() {
 }
 
 const port = Number(process.env.PORT || config.port || 8080);
-const sslPort = Number(config.sslPort || 8443);
+const sslPort = Number(process.env.SSL_PORT || config.sslPort || 8443);
 const host = config.host || '0.0.0.0';
 
 const certFile = path.join(ROOT, 'ssl', 'server.pem');

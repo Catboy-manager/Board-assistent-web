@@ -705,6 +705,11 @@ window.APP = {
 
   /* ---- Drawers ---- */
   clamp(v, min, max) { return Math.max(min, Math.min(max, v)); },
+  /* clientX и innerWidth — визуальные пиксели, --ai-w живёт в layout */
+  aiPanelWidth(clientX) {
+    const z = window.CANVAS && window.CANVAS.scale ? window.CANVAS.scale() : 1;
+    return this.clamp((window.innerWidth - clientX) / z, 260, 640);
+  },
   initResizer() {
     const rz = document.getElementById('ai-resizer');
     if (!rz) return;
@@ -714,15 +719,14 @@ window.APP = {
     let dragging = false;
     const onMove = (e) => {
       if (!dragging) return;
-      const w = this.clamp(window.innerWidth - e.clientX, 260, 640);
-      root.style.setProperty('--ai-w', w + 'px');
+      root.style.setProperty('--ai-w', this.aiPanelWidth(e.clientX) + 'px');
     };
     const onUp = (e) => {
       if (!dragging) return;
       dragging = false;
       document.body.style.userSelect = '';
       document.body.style.cursor = '';
-      localStorage.setItem('aiPanelWidth', String(this.clamp(window.innerWidth - e.clientX, 260, 640)));
+      localStorage.setItem('aiPanelWidth', String(this.aiPanelWidth(e.clientX)));
       document.removeEventListener('pointermove', onMove);
       document.removeEventListener('pointerup', onUp);
     };

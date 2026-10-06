@@ -28,6 +28,8 @@
   <input id="title" type="text" placeholder="Например: 📦 Посылка у двери">
   <label>Текст</label>
   <textarea id="text" placeholder="Оставь себе напоминание, которое покажется на доске"></textarea>
+  <label>Чат / собеседник <span style="color:#7c8a97">(для статистики)</span></label>
+  <input id="chat" type="text" placeholder="Например: Мама, Рабочий чат, Друзья">
   <div class="row">
     <button id="send">➤ Отправить</button>
     <button class="reset" id="clear" title="Очистить">🗑</button>
@@ -50,12 +52,13 @@
   document.getElementById('send').addEventListener('click', async function () {
     var title = document.getElementById('title').value.trim();
     var text = document.getElementById('text').value.trim();
+    var chat = document.getElementById('chat').value.trim();
     if (!title && !text) { set('Заполни хотя бы одно поле', true); return; }
     try {
       var r = await fetch('/api/notify/send', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title: title, text: text, app: 'Телефон' })
+        body: JSON.stringify({ title: title, text: text, app: 'Телефон', chat: chat })
       });
       var d = await r.json();
       if (d.ok) { set('✓ Отправлено'); document.getElementById('text').value = ''; }

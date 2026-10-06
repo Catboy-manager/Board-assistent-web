@@ -15,8 +15,21 @@ module.exports = (deps) => {
   const IGNORED_APPS = String(process.env.KANBAN_NOTIFY_IGNORE || 'downloads,youtube morphe')
     .split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
 
+  /* Приватность: банковские SMS и уведомления платёжных приложений
+     не сохраняются, не стримятся и не попадают ни в историю (доску), ни в AI.
+     Фильтр по фрагментам — ловит и склонения, и слитные формы (СберБанк, Сбер ID). */
+  const PRIVACY_APP_RE = /сбер|тиньк|tinkoff|втб|альфа|alfa|райф|совком|газпром|открытие|сбп|юмани|yoomoney|киви|qiwi|банк|bank|вклад|депозит|хоум|кредитн|мобил\w{0,4}\s*банк/i;
+  const PRIVACY_TEXT_RE = /сбер|тиньк|tinkoff|\bвтб|альфа|alfa|райф|совком|газпром|открытие|сбп|юмани|yoomoney|киви|qiwi|банк|bank|вклад|депозит|карт|счет|счёт|плат[её]ж|оплат|списан|зачислен|перевод|транзак|квитанци|смс-?код|код подтверждени|подтверждени\w{0,12}(перевода|операци|плат[её]жа)|покупк|заблокирован|баланс|остаток|purchase|payment|transfer|credited|debited|paid|\d[\d\s]{2,}\s?(₽|руб(лей)?\.?|rub|₴|\$|usd|eur|euro)/i;
+
+  function isPrivate(item) {
+    if (!item) return false;
+    const app = String(item.app || '').trim();
+    const s = app + ' ' + String(item.title || '') + ' ' + String(item.text || '');
+    return PRIVACY_APP_RE.test(app) || PRIVACY_TEXT_RE.test(s);
+  }
+
   function isIgnored(item) {
-    return IGNORED_APPS.includes(String(item && item.app || '').trim().toLowerCase());
+    return IGNORED_APPS.includes(String(item && item.app || '').trim().toLowerCase()) || isPrivate(item);
   }
   const keptBefore = history.length;
   history = history.filter(r => !isIgnored(r));
@@ -67,7 +80,7 @@ module.exports = (deps) => {
       let body = {};
       const raw = ((await readBody(req)) || '').toString();
       console.log('[notify] POST ctype=' + String(req.headers['content-type'] || '?') +
-        ' ip=' + (req.socket.remoteAddress || '?') + ' body[' + raw.length + '] ' + raw.slice(0, 200));
+        ' ip=' + (req.socket.remoteAddress || '?') + ' body_len=' + raw.length);
       const ctype = String(req.headers['content-type'] || '').toLowerCase();
       const trimmed = raw.trim();
       if (trimmed.startsWith('{') || ctype.includes('json')) {
@@ -90,8 +103,10 @@ module.exports = (deps) => {
       const title = String(body.title || '').trim();
       const text = String(body.text || body.body || '').trim();
       const app = String(body.app || body.source || 'Телефон').trim().slice(0, 40);
+      const user = String(body.user || body.from || '').trim().slice(0, 80);
+      const chat = String(body.chat || body.group || '').trim().slice(0, 120);
       if (!title && !text) return json(res, 400, { error: 'required: title or text' });
-      const rec = addNotify({ title: title.slice(0, 160), text: text.slice(0, 500), app });
+      const rec = addNotify({ title: title.slice(0, 160), text: text.slice(0, 500), app, user, chat });
       if (rec) return json(res, 200, { ok: true, id: rec.id });
       return json(res, 200, { ok: true, ignored: true });
     }
@@ -122,5 +137,8 @@ module.exports = (deps) => {
     return false;
   }
 
-  return { handle };
+  return {
+    handle,
+    history() { return history.slice(); }
+  };
 };

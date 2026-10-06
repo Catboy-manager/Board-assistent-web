@@ -124,6 +124,33 @@
       </div>
       <div id="sp-interests" class="sp-pane active"></div>
     </div>
+
+    <div id="games-panel" class="side-panel games-panel">
+      <div class="sp-head">
+        <h2>🎮 Игры <span class="sp-sub">Steam + сторонние</span></h2>
+        <div class="st-tabs">
+          <button class="st-tab active" data-gs="steam" title="Библиотека Steam">🕹</button>
+          <button class="st-tab" data-gs="third" title="Сторонние игры">📀</button>
+        </div>
+        <button class="icon-btn sp-mini" data-minim="games" title="Свернуть / развернуть">–</button>
+      </div>
+      <div id="sp-games" class="sp-pane active"></div>
+    </div>
+
+    <div id="msgs-panel" class="side-panel msgs-panel">
+      <div class="sp-head">
+        <h2>🗨 Сообщения <span class="sp-sub">статистика уведомлений</span></h2>
+        <div class="st-tabs">
+          <button class="st-tab active" data-mt="daily" title="График по дням">📅</button>
+          <button class="st-tab" data-mt="hours" title="Распределение по часам">🕐</button>
+          <button class="st-tab" data-mt="apps" title="Приложения">📲</button>
+          <button class="st-tab" data-mt="users" title="Собеседники">👤</button>
+          <button class="st-tab" data-mt="chats" title="Чаты">💬</button>
+        </div>
+        <button class="icon-btn sp-mini" data-minim="msgs" title="Свернуть / развернуть">–</button>
+      </div>
+      <div id="sp-msgs" class="sp-pane active"></div>
+    </div>
   </div>
 
   <div id="board-panels" class="board-panels"></div>
@@ -185,6 +212,7 @@
     <button class="icon-btn" data-zoom="out" title="Отдалить">−</button>
     <button class="icon-btn" data-zoom="reset" title="Масштаб 100%">1:1</button>
     <button class="icon-btn" data-zoom="in" title="Приблизить">+</button>
+    <span id="zoom-pct" class="zoom-pct">100%</span>
   </div>
 
   <script src="/js/app.js"></script>
@@ -208,6 +236,8 @@
   <script src="/js/canvas.js?v=1"></script>
   <script src="/js/youtube.js?v=2"></script>
   <script src="/js/interests.js?v=1"></script>
+  <script src="/js/games.js?v=1"></script>
+  <script src="/js/msgs.js?v=1"></script>
   <script src="/js/place.js"></script>
 </body>
 </html>

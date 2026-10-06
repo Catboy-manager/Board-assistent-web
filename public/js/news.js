@@ -72,17 +72,35 @@
     };
   }
 
-  async function fetchNews() {
+  async function fetchNews(silent) {
     const list = $('nw-list');
-    list.innerHTML = '<div class="empty-state">Загрузка сводки…</div>';
+    if (!silent || !data) list.innerHTML = '<div class="empty-state">Загрузка сводки…</div>';
     try {
       const r = await fetch('/api/news?period=' + period);
       if (!r.ok) throw new Error(r.status);
       data = await r.json();
       render();
     } catch (err) {
-      list.innerHTML = '<div class="empty-state">Ошибка загрузки новостей</div>';
+      if (!silent) list.innerHTML = '<div class="empty-state">Ошибка загрузки новостей</div>';
     }
+  }
+
+  /* Автообновление ленты раз в час: только если панель (или тайл новостей)
+     реально видна на экране и вкладка активна — без мигания загрузки. */
+  function startAutoRefresh() {
+    setInterval(() => {
+      if (document.hidden) return;
+      const pane = $('sw-news');
+      const tile = document.querySelector('.bp-tile[data-tile="news"]');
+      if (!tile) {
+        const sw = document.getElementById('side-widget');
+        if (!sw || sw.classList.contains('hidden')) return;
+        const tab = document.querySelector('.sw-tab.active');
+        if (tab && tab.dataset.tab !== 'news') return;
+        if (pane && !pane.classList.contains('active')) return;
+      }
+      fetchNews(true);
+    }, 3600000);
   }
 
   function groupHead(g) {
@@ -228,5 +246,6 @@
 
   document.addEventListener('DOMContentLoaded', () => {
     window.NEWSBTN = { load };
+    startAutoRefresh();
   });
 })();
