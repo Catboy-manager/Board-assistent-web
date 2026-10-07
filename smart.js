@@ -60,6 +60,10 @@ module.exports = (deps) => {
     work_speed: 'devices.capabilities.mode', swing: 'devices.capabilities.mode'
   };
   const TOKEN_FILE = path.join(dataDir, 'yandex-token.txt');
+  const PASSPORT_CLIENT_ID = 'c0ebe342af7d48fbbbfcf2d2eedb8f9e';
+  const PASSPORT_CLIENT_SECRET = 'ad0a908f0aa341a182a37ecd75bc319e';
+  const DEVICE_CODE_URL = 'https://oauth.yandex.ru/device/code';
+  const OAUTH_TOKEN_URL = 'https://oauth.yandex.ru/token';
 
   function defaults() {
     return { devices: [], scenes: [], poll: { enabled: false, interval: 5000 }, hosts: [], scanAt: 0 };
@@ -279,6 +283,88 @@ module.exports = (deps) => {
   function yaNeeded() {
     return { error: 'Нужен токен Яндекса (OAuth x_token): POST /api/smart/config {yandexToken} или KANBAN_YANDEX_TOKEN в окружении', code: 501 };
   }
+
+  /* вход по QR (OAuth device flow, RFC 8628; клиент — публичный из Android-приложений Яндекса) */
+  function postForm(urlStr, fields) {
+    return new Promise((resolve, reject) => {
+      let u;
+      try { u = new URL(urlStr); } catch (e) { return reject(new Error('некорректный URL: ' + urlStr)); }
+      const payload = Buffer.from(Object.entries(fields).map(([k, v]) => encodeURIComponent(k) + '=' + encodeURIComponent(String(v))).join('&'));
+      const req = https.request({
+        hostname: u.hostname, port: u.port || 443, path: u.pathname + u.search, method: 'POST',
+        timeout: 8000, headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Content-Length': payload.length }
+      }, (r) => {
+        let data = '';
+        r.on('data', d => { if (data.length < 20000) data += d; });
+        r.on('end', () => { let json = null; try { json = JSON.parse(data); } catch (e) {} resolve({ status: r.statusCode, json, text: data.slice(0, 2000) }); });
+        r.on('error', reject);
+      });
+      req.on('timeout', () => req.destroy(new Error('timeout')));
+      req.on('error', reject);
+      req.write(payload);
+      req.end();
+    });
+  }
+
+  let yaAuth = null; // { device_code, user_code, verification_url, ts, expires_in, interval, nextPoll, state }
+
+  function authSnap() {
+    if (!yaAuth) return { state: yandexToken() ? 'ready' : 'none' };
+    if (yaTokenCache) return { state: 'ready' };
+    const left = Math.max(0, Math.round((yaAuth.ts + yaAuth.expires_in * 1000 - Date.now()) / 1000));
+    if (left <= 0) return { state: 'expired' };
+    return { state: yaAuth.state, user_code: yaAuth.user_code, url: yaAuth.verification_url, left, interval: yaAuth.interval };
+  }
+
+  async function authStart() {
+    if (yaAuth && Date.now() < yaAuth.ts + yaAuth.expires_in * 1000 && yaAuth.state === 'pending') {
+      return { ok: true, qr: authSnap() };
+    }
+    const r = await postForm(DEVICE_CODE_URL, {
+      client_id: PASSPORT_CLIENT_ID,
+      device_id: Array.from({ length: 10 }, () => 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'[Math.floor(Math.random() * 62)]).join(''),
+      device_name: 'kanban-board'
+    });
+    if (r.status !== 200 || !r.json || !r.json.user_code) {
+      return { error: 'Не удалось начать вход: ' + r.status + ' ' + String(r.text || '').slice(0, 120) };
+    }
+    yaAuth = {
+      device_code: r.json.device_code, user_code: r.json.user_code,
+      verification_url: r.json.verification_url || 'https://ya.ru/device',
+      ts: Date.now(), expires_in: Number(r.json.expires_in) || 300,
+      interval: Math.max(4, Number(r.json.interval) || 5), nextPoll: 0, state: 'pending'
+    };
+    return { ok: true, qr: authSnap() };
+  }
+
+  async function authPoll() {
+    if (!yaAuth || Date.now() - yaAuth.ts > yaAuth.expires_in * 1000) {
+      yaAuth = null;
+      return { state: yandexToken() ? 'ready' : 'none' };
+    }
+    if (yaAuth.state !== 'pending') return authSnap();
+    if (yaAuth.nextPoll > Date.now()) return authSnap();
+    yaAuth.nextPoll = Date.now() + yaAuth.interval * 1000;
+    const r = await postForm(OAUTH_TOKEN_URL, {
+      grant_type: 'device_code', code: yaAuth.device_code,
+      client_id: PASSPORT_CLIENT_ID, client_secret: PASSPORT_CLIENT_SECRET
+    });
+    if (r.json && r.json.access_token) {
+      const saved = setYandexToken(r.json.access_token);
+      const snap = { state: 'ready', yandex: saved };
+      yaAuth = saved ? null : yaAuth;
+      emit({ type: 'smart', kind: 'yandex', text: saved ? 'Токен Яндекса получен (вход по QR)' : 'Не удалось сохранить токен' });
+      return snap;
+    }
+    const err = r.json && r.json.error;
+    if (err === 'authorization_pending') return authSnap();
+    if (err === 'slow_down') { yaAuth.interval += 5; return authSnap(); }
+    if (err === 'access_denied') { const s = authSnap(); yaAuth.state = 'denied'; return s; }
+    if (err === 'expired_token') { yaAuth = null; return { state: 'expired' }; }
+    return Object.assign(authSnap(), { detail: String(r.text || '').slice(0, 120) });
+  }
+
+  function authStop() { yaAuth = null; return { ok: true }; }
 
   async function yaRefreshDevices() {
     if (!yandexToken()) return null;
@@ -1197,7 +1283,7 @@ module.exports = (deps) => {
         scanAt: store.scanAt, scanning,
         events: events.slice(0, 50),
         kinds: KINDS, adapters: ADAPTER_LIST,
-        key: !!smartKey(), yandex: !!yandexToken()
+        key: !!smartKey(), yandex: !!yandexToken(), auth: authSnap()
       });
     }
 
@@ -1220,6 +1306,24 @@ module.exports = (deps) => {
       const saved = setYandexToken(body.yandexToken);
       if (!saved) return json(res, 500, { ok: false, error: 'не удалось записать токен' });
       return json(res, 200, { ok: true, yandex: !!yandexToken() });
+    }
+
+    if (p === '/api/smart/auth') {
+      const action = String(body.action || '').toLowerCase();
+      if (action === 'start') {
+        const r = await authStart();
+        if (r.error) return json(res, 400, { error: r.error });
+        return json(res, 200, { ok: true, auth: r.qr });
+      }
+      if (action === 'stop') {
+        authStop();
+        return json(res, 200, { ok: true, auth: authSnap() });
+      }
+      if (action === 'status' || action === 'poll') {
+        const r = await authPoll();
+        return json(res, 200, { ok: true, auth: r });
+      }
+      return json(res, 400, { error: 'нужен action: start|stop|status' });
     }
 
     if (p === '/api/smart/cmd') {

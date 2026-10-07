@@ -11,6 +11,8 @@
   let editId = null;
   let prefill = null;
   let refreshTimer = null;
+  let yaTimer = null;
+  let yaSeq = 0;
 
   function key() { try { return localStorage.getItem(KEY_STORE) || ''; } catch (e) { return ''; } }
 
@@ -73,6 +75,7 @@
       <input type="password" id="sm-keyin" placeholder="KANBAN_SMART_KEY" class="sm-kin">
       <button class="btn mini" id="sm-keyok">OK</button>
     </div>
+    <div class="sm-ya" id="sm-ya"></div>
     <div class="sm-tabs">
       <button class="sm-tab active" data-t="dev">Устройства</button>
       <button class="sm-tab" data-t="host">Сеть</button>
@@ -139,6 +142,7 @@
     if (intBox) intBox.value = String(data.poll.interval);
     if (data.scanning) setStatus('сканирую…');
     else if (data.scanAt) setStatus('сеть: ' + new Date(data.scanAt).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }));
+    renderYa();
     render();
   }
 
@@ -450,6 +454,85 @@
         <span class="sm-ev-t">${fmtTime(e.ts)}</span>
         <span class="sm-ev-x">${esc(e.text || e.type || '')}</span>
       </div>`).join('');
+  }
+
+  /* ---------------- вход в Яндекс по QR (Алиса) ---------------- */
+
+  function renderYa() {
+    const box = $('sm-ya');
+    if (!box) return;
+    const a = (data && data.auth) || { state: data && data.yandex ? 'ready' : 'none' };
+    let html = '';
+    if (a.state === 'ready' || (data && data.yandex)) {
+      html = `<div class="sm-ya-ready">✅ Алиса подключена <button class="btn mini link" id="sm-ya-del">отозвать токен</button></div>`;
+    } else if (a.state === 'pending') {
+      const qr = 'https://api.qrserver.com/v1/create-qr-code/?size=240x240&qzone=1&data=' + encodeURIComponent(a.url + '?code=' + a.user_code);
+      html = `<div class="sm-ya-qr">
+        <img src="${qr}" alt="QR" title="Отсканируйте камерой Яндекса или телефона">
+        <div class="sm-ya-inf">
+          <b>Вход в Яндекс</b>
+          <div class="sm-ya-sub">Отсканируйте QR камерой («Алиса, это QR-код» или приложение Яндекс) или откройте
+            <nobr><a href="${esc(a.url)}" target="_blank" rel="noopener">${esc(a.url)}</a></nobr> и введите код</div>
+          <div class="sm-ya-code">${a.user_code}</div>
+          <div class="sm-ya-sub">осталось ≈ <b id="sm-ya-left">${esc(String(a.left))}</b> с</div>
+          <div class="sm-ya-acts">
+            <button class="btn mini link" id="sm-ya-stop">отмена</button>
+          </div>
+        </div>
+      </div>`;
+    } else if (a.state === 'denied') {
+      html = `<div class="sm-ya-warn">Вход отклонён в приложении. <button class="btn mini" id="sm-ya-start">🔑 Войти заново</button></div>`;
+    } else if (a.state === 'expired') {
+      html = `<div class="sm-ya-warn">Код истёк. <button class="btn mini" id="sm-ya-start">🔑 Войти ещё раз</button></div>`;
+    } else {
+      html = `<div class="sm-ya-open">
+        <button class="btn mini" id="sm-ya-start">🔑 Войти в Яндекс (QR)</button>
+        <span class="sm-ya-hint">Нужно для управления станцией Алисы: распознавание команд, TTS, вкл/выкл.</span>
+      </div>`;
+    }
+    box.innerHTML = html;
+    const start = $('sm-ya-start');
+    if (start) start.onclick = yaStart;
+    const stop = $('sm-ya-stop');
+    if (stop) stop.onclick = yaStop;
+    const del = $('sm-ya-del');
+    if (del) del.onclick = yaRemove;
+    if (a.state === 'pending') scheduleYaPoll(a.interval || 5);
+    else stopYaPoll();
+  }
+
+  function scheduleYaPoll(interval) {
+    if (yaTimer) return;
+    yaTimer = setTimeout(async () => {
+      yaTimer = null;
+      const seq = ++yaSeq;
+      const r = await api('POST', '/api/smart/auth', { action: 'status' });
+      if (r.status !== 200 || seq !== yaSeq) return;
+      if (r.d && r.d.auth) {
+        if (r.d.auth.state === 'ready') { toast('Умный дом', 'Яндекс: токен получен ✓'); data.yandex = r.d.auth.yandex; }
+        data.auth = r.d.auth;
+      }
+      renderYa();
+      if (!yaTimer && data.auth && data.auth.state === 'pending') scheduleYaPoll(data.auth.interval || 5);
+    }, Math.max(4000, (interval || 5) * 1000));
+  }
+
+  function stopYaPoll() { yaTimer = null; yaSeq++; }
+
+  async function yaStart() {
+    stopYaPoll();
+    const r = await api('POST', '/api/smart/auth', { action: 'start' });
+    if (r.status === 200 && r.d && r.d.auth) { data.auth = r.d.auth; renderYa(); }
+    else toast('Умный дом', (r.d && r.d.error) || 'не удалось начать вход', true);
+  }
+
+  function yaStop() {
+    stopYaPoll();
+    api('POST', '/api/smart/auth', { action: 'stop' }).then(r => { if (r.status === 200) refresh(); });
+  }
+
+  function yaRemove() {
+    api('POST', '/api/smart/config', { yandexToken: '' }).then(r => refresh());
   }
 
   /* ---------------- события сервера ---------------- */
