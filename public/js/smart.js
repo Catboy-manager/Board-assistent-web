@@ -471,9 +471,10 @@
         <img src="${qr}" alt="QR" title="Отсканируйте камерой Яндекса или телефона">
         <div class="sm-ya-inf">
           <b>Вход в Яндекс</b>
-          <div class="sm-ya-sub">Отсканируйте QR камерой («Алиса, это QR-код» или приложение Яндекс) или откройте
+          <div class="sm-ya-sub">Отсканируйте QR камерой (app «Яндекс» или «Алиса, это QR-код») или откройте
             <nobr><a href="${esc(a.url)}" target="_blank" rel="noopener">${esc(a.url)}</a></nobr> и введите код</div>
           <div class="sm-ya-code">${a.user_code}</div>
+          <div class="sm-ya-sub"><b>Важно:</b> после входа нажмите на странице кнопку подтверждения — токен появится автоматически, закрывать окно не надо.</div>
           <div class="sm-ya-sub">осталось ≈ <b id="sm-ya-left">${esc(String(a.left))}</b> с</div>
           <div class="sm-ya-acts">
             <button class="btn mini link" id="sm-ya-stop">отмена</button>
@@ -507,14 +508,17 @@
       yaTimer = null;
       const seq = ++yaSeq;
       const r = await api('POST', '/api/smart/auth', { action: 'status' });
-      if (r.status !== 200 || seq !== yaSeq) return;
-      if (r.d && r.d.auth) {
-        if (r.d.auth.state === 'ready') { toast('Умный дом', 'Яндекс: токен получен ✓'); data.yandex = r.d.auth.yandex; }
+      if (seq !== yaSeq) return;
+      if (r.status === 200 && r.d && r.d.auth) {
+        if (r.d.auth.state === 'ready') toast('Умный дом', 'Яндекс: токен получен ✓');
         data.auth = r.d.auth;
+        data.yandex = data.auth.state === 'ready' ? true : data.yandex;
+        renderYa();
       }
-      renderYa();
-      if (!yaTimer && data.auth && data.auth.state === 'pending') scheduleYaPoll(data.auth.interval || 5);
-    }, Math.max(4000, (interval || 5) * 1000));
+      const st = (data.auth && data.auth.state) || (data.yandex ? 'ready' : 'none');
+      if (st === 'pending') scheduleYaPoll(data.auth.interval || 5);
+      else stopYaPoll();
+    }, Math.max(3000, (interval || 5) * 1000));
   }
 
   function stopYaPoll() { yaTimer = null; yaSeq++; }

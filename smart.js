@@ -60,6 +60,7 @@ module.exports = (deps) => {
     work_speed: 'devices.capabilities.mode', swing: 'devices.capabilities.mode'
   };
   const TOKEN_FILE = path.join(dataDir, 'yandex-token.txt');
+  const YA_AUTH_FILE = path.join(dataDir, 'yandex-auth.json');
   const PASSPORT_CLIENT_ID = 'c0ebe342af7d48fbbbfcf2d2eedb8f9e';
   const PASSPORT_CLIENT_SECRET = 'ad0a908f0aa341a182a37ecd75bc319e';
   const DEVICE_CODE_URL = 'https://oauth.yandex.ru/device/code';
@@ -306,14 +307,58 @@ module.exports = (deps) => {
     });
   }
 
-  let yaAuth = null; // { device_code, user_code, verification_url, ts, expires_in, interval, nextPoll, state }
+  let yaAuth = null; // { device_code, user_code, verification_url, ts, expires_in, delay, state }
+  let yaTimer = null;
+
+  function logAuth(msg) { console.log('[smart] auth: ' + msg); }
+
+  function clearYaTimer() { if (yaTimer) { clearTimeout(yaTimer); yaTimer = null; } }
+
+  function authSave() {
+    if (!yaAuth) { try { fs.unlinkSync(YA_AUTH_FILE); } catch (e) {} return; }
+    try { fs.writeFileSync(YA_AUTH_FILE, JSON.stringify({
+      device_code: yaAuth.device_code, user_code: yaAuth.user_code,
+      verification_url: yaAuth.verification_url, ts: yaAuth.ts,
+      expires_in: yaAuth.expires_in, delay: yaAuth.delay, state: yaAuth.state
+    }), { mode: 0o600 }); } catch (e) { logAuth('не удалось сохранить сессию: ' + e.message); }
+  }
+
+  function authLoad() {
+    try {
+      const j = JSON.parse(fs.readFileSync(YA_AUTH_FILE, 'utf8'));
+      yaAuth = {
+        device_code: j.device_code, user_code: j.user_code,
+        verification_url: j.verification_url || 'https://ya.ru/device',
+        ts: Number(j.ts), expires_in: Number(j.expires_in) || 300,
+        delay: Math.max(4000, Number(j.delay) || 5000), state: j.state === 'denied' ? 'denied' : 'pending'
+      };
+      if (Date.now() - yaAuth.ts > yaAuth.expires_in * 1000) {
+        logAuth('найдена истёкшая сессия, сброшена');
+        yaAuth = null; authSave();
+      } else {
+        logAuth('сессия восстановлена (код ' + yaAuth.user_code + ', осталось ~' + Math.round((yaAuth.ts + yaAuth.expires_in * 1000 - Date.now()) / 1000) + ' с)');
+      }
+    } catch (e) { yaAuth = null; }
+    if (yaAuth && yaAuth.state === 'pending') scheduleYaTick(1000);
+  }
 
   function authSnap() {
     if (!yaAuth) return { state: yandexToken() ? 'ready' : 'none' };
     if (yaTokenCache) return { state: 'ready' };
     const left = Math.max(0, Math.round((yaAuth.ts + yaAuth.expires_in * 1000 - Date.now()) / 1000));
-    if (left <= 0) return { state: 'expired' };
-    return { state: yaAuth.state, user_code: yaAuth.user_code, url: yaAuth.verification_url, left, interval: yaAuth.interval };
+    if (left <= 0 || yaAuth.state === 'expired') return { state: 'expired' };
+    return { state: yaAuth.state, user_code: yaAuth.user_code, url: yaAuth.verification_url, left, interval: Math.round((yaAuth.delay || 5000) / 1000) };
+  }
+
+  function scheduleYaTick(ms) {
+    if (yaTimer || !yaAuth) return;
+    yaTimer = setTimeout(async () => {
+      yaTimer = null;
+      if (!yaAuth) return;
+      if (yaAuth.state !== 'pending') return;
+      const next = await authPollTick();
+      if (yaAuth && yaAuth.state === 'pending' && next > 0) scheduleYaTick(next);
+    }, Math.max(1000, ms));
   }
 
   async function authStart() {
@@ -328,43 +373,71 @@ module.exports = (deps) => {
     if (r.status !== 200 || !r.json || !r.json.user_code) {
       return { error: 'Не удалось начать вход: ' + r.status + ' ' + String(r.text || '').slice(0, 120) };
     }
+    clearYaTimer();
     yaAuth = {
       device_code: r.json.device_code, user_code: r.json.user_code,
       verification_url: r.json.verification_url || 'https://ya.ru/device',
       ts: Date.now(), expires_in: Number(r.json.expires_in) || 300,
-      interval: Math.max(4, Number(r.json.interval) || 5), nextPoll: 0, state: 'pending'
+      delay: Math.max(4000, (Number(r.json.interval) || 5) * 1000), state: 'pending'
     };
+    authSave();
+    logAuth('начат вход, код «' + yaAuth.user_code + '», срок ' + yaAuth.expires_in + ' с, интервал ' + yaAuth.delay + ' мс');
+    scheduleYaTick(1000);
     return { ok: true, qr: authSnap() };
   }
 
-  async function authPoll() {
-    if (!yaAuth || Date.now() - yaAuth.ts > yaAuth.expires_in * 1000) {
-      yaAuth = null;
-      return { state: yandexToken() ? 'ready' : 'none' };
+  async function authPollTick() {
+    if (!yaAuth) return 0;
+    if (Date.now() - yaAuth.ts > yaAuth.expires_in * 1000) {
+      logAuth('срок сессии истёк');
+      yaAuth = null; authSave();
+      return 0;
     }
-    if (yaAuth.state !== 'pending') return authSnap();
-    if (yaAuth.nextPoll > Date.now()) return authSnap();
-    yaAuth.nextPoll = Date.now() + yaAuth.interval * 1000;
-    const r = await postForm(OAUTH_TOKEN_URL, {
+    let r;
+    try { r = await postForm(OAUTH_TOKEN_URL, {
       grant_type: 'device_code', code: yaAuth.device_code,
       client_id: PASSPORT_CLIENT_ID, client_secret: PASSPORT_CLIENT_SECRET
-    });
+    }); }
+    catch (e) { logAuth('ошибка сети при опросе: ' + e.message); return yaAuth.delay; }
     if (r.json && r.json.access_token) {
       const saved = setYandexToken(r.json.access_token);
-      const snap = { state: 'ready', yandex: saved };
-      yaAuth = saved ? null : yaAuth;
-      emit({ type: 'smart', kind: 'yandex', text: saved ? 'Токен Яндекса получен (вход по QR)' : 'Не удалось сохранить токен' });
-      return snap;
+      let devices = 0;
+      let bad = null;
+      if (saved) {
+        try {
+          const v = await yaRefreshDevices();
+          if (v) devices = v.list.length;
+          else bad = 'токен не принят облаком Quasar (401/404)';
+        } catch (e) { bad = e.message; }
+      }
+      logAuth(saved ? ('успех: токен сохранён, облачных устройств ' + devices + (bad ? ', ' + bad : '')) : 'токен получен, но файл не записан');
+      emit({ type: 'smart', kind: 'yandex', text: 'Токен Яндекса получен ✓' + (devices ? ', устройств Алисы: ' + devices : (bad ? ', но ' + bad : '')) });
+      yaAuth = null; authSave();
+      return 0;
     }
     const err = r.json && r.json.error;
-    if (err === 'authorization_pending') return authSnap();
-    if (err === 'slow_down') { yaAuth.interval += 5; return authSnap(); }
-    if (err === 'access_denied') { const s = authSnap(); yaAuth.state = 'denied'; return s; }
-    if (err === 'expired_token') { yaAuth = null; return { state: 'expired' }; }
-    return Object.assign(authSnap(), { detail: String(r.text || '').slice(0, 120) });
+    if (err === 'authorization_pending') return yaAuth.delay;
+    if (err === 'slow_down') { yaAuth.delay = (yaAuth.delay || 5000) + 5000; logAuth('slow_down: интервал ' + yaAuth.delay + ' мс'); authSave(); return yaAuth.delay; }
+    if (err === 'access_denied') { yaAuth.state = 'denied'; logAuth('вход отклонён пользователем'); authSave(); return 0; }
+    if (err === 'expired_token') { logAuth('код истёк (expired_token)'); yaAuth = null; authSave(); return 0; }
+    logAuth('неожиданный ответ token: HTTP ' + r.status + ' ' + String(r.text || '').slice(0, 150));
+    return yaAuth.delay;
   }
 
-  function authStop() { yaAuth = null; return { ok: true }; }
+  async function authPoll() {
+    clearYaTimer();
+    const next = await authPollTick();
+    if (yaAuth && yaAuth.state === 'pending' && next > 0) scheduleYaTick(next);
+    return authSnap();
+  }
+
+  function authStop() {
+    clearYaTimer();
+    yaAuth = null;
+    authSave();
+    logAuth('вход отменён');
+    return { ok: true };
+  }
 
   async function yaRefreshDevices() {
     if (!yandexToken()) return null;
@@ -1421,6 +1494,7 @@ module.exports = (deps) => {
 
   enrichOnline();
   restartTimer();
+  authLoad();
 
   return {
     handle,
