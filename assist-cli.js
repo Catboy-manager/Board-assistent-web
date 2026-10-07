@@ -18,6 +18,8 @@
    node assist-cli.js --rem <reminders.json> remind "Дедлайн" "2026-09-14T09:00:00"
    node assist-cli.js smart list
    node assist-cli.js smart on "Лампа" / smart off "Розетка" / smart toggle "Чайник"
+   node assist-cli.js smart say "Станция" --msg "включи чайник"
+   node assist-cli.js smart ytoken "<OAuth x_token Яндекса>"
    node assist-cli.js smart scan
 */
 
@@ -266,11 +268,22 @@ switch (cmd) {
           const raw = args.slice(2).join(' ').trim();
           try { value = JSON.parse(raw || 'null'); } catch (e) { value = raw; }
         }
+        if (sub === 'say') {
+          value = flags['--msg'] || flags['--text'] || '';
+          if (!String(value).trim()) fail('Для say укажите текст: smart say "Станция" --msg "привет"');
+        }
         const r = await api('POST', '/api/smart/cmd', { name, action, value });
         if (r.status !== 200) smartFail(r);
-        done('Выполнено: ' + name + ' → ' + ((r.json && r.json.stateText) || action));
+        done('Выполнено: ' + name + ' → ' + ((r.json && r.json.stateText) || action + (value !== undefined && value !== null && value !== '' ? ' (' + value + ')' : '')));
       }
-      fail('Неизвестная подкоманда smart: ' + sub + '. Есть: list, scan, on, off, toggle, set, say');
+      if (sub === 'ytoken') {
+        const token = args[1] || flags['--token'] || '';
+        if (!token) fail('Укажите токен: smart ytoken "<OAuth x_token>"');
+        const r = await api('POST', '/api/smart/config', { yandexToken: token });
+        if (r.status !== 200) smartFail(r);
+        done('Токен Яндекса сохранён на сервере');
+      }
+      fail('Неизвестная подкоманда smart: ' + sub + '. Есть: list, scan, on, off, toggle, set, say, ytoken');
     })().catch(e => fail(e.message || String(e)));
     break;
   }

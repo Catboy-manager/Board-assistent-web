@@ -8,6 +8,8 @@ module.exports = (deps) => {
   const os = require('os');
   const http = require('http');
   const https = require('https');
+  const dgram = require('dgram');
+  const crypto = require('crypto');
   const { execFile } = require('child_process');
 
   const FILE = path.join(dataDir, 'smart.json');
@@ -26,11 +28,38 @@ module.exports = (deps) => {
     { id: 'manual', label: 'Ручное (состояние вручную)' },
     { id: 'webhook', label: 'Вебхук (устройство само шлёт состояние)' },
     { id: 'http', label: 'HTTP-мост (свой/чужой API)' },
-    { id: 'glagol', label: 'Алиса, Glagol (LAN)', soon: 'этап 2' },
+    { id: 'glagol', label: 'Алиса, Glagol (LAN + облако Яндекса)' },
     { id: 'tuya', label: 'Tuya LAN', soon: 'этап 3' },
     { id: 'voice', label: 'Голос через станцию', soon: 'этап 3' },
     { id: 'mqtt', label: 'MQTT', soon: 'этап 3' }
   ];
+
+  /* Яндекс Станция: известные платформы для названий в обзоре */
+  const YANDEX_PLATFORMS = {
+    yandexstation: ['Яндекс', 'Станция (2018)'], yandexstation_2: ['Яндекс', 'Станция Макс (2020)'],
+    yandexmini: ['Яндекс', 'Станция Мини (2019)'], yandexmini_2: ['Яндекс', 'Станция Мини 2 (2021)'],
+    bergamot: ['Яндекс', 'Станция Мини 3 (2024)'], yandexmicro: ['Яндекс', 'Станция Лайт (2021)'],
+    plum: ['Яндекс', 'Станция Лайт 2 (2024)'], yandexmidi: ['Яндекс', 'Станция 2 (2022)'],
+    cucumber: ['Яндекс', 'Станция Миди (2023)'], chiron: ['Яндекс', 'Станция Дуо Макс (2023)'],
+    orion: ['Яндекс', 'Станция 3 (2025)'], mango: ['Яндекс', 'Станция Стрит (2025)'],
+    yandexmodule: ['Яндекс', 'Модуль (2019)'], yandexmodule_2: ['Яндекс', 'Модуль 2 (2021)'],
+    yandex_tv: ['Яндекс', 'ТВ с Алисой'], goya: ['Яндекс', 'ТВ (2022)'],
+    magritte: ['Яндекс', 'ТВ Станция LED (2023)'], magritte_2: ['Яндекс', 'ТВ Станция QLED (2025)'],
+    monet: ['Яндекс', 'ТВ Станция Бейсик LED (2024)'], monet_2: ['Яндекс', 'ТВ Станция Бейсик QLED (2025)'],
+    levitan: ['Яндекс', 'ТВ Станция MiniLED (2026)'], malevich: ['Яндекс', 'ТВ Станция Про MiniLED (2025)'],
+    saturn: ['Яндекс', 'Хаб (2023)']
+  };
+  const YANDEX_TV_KEYS = new Set(['yandex_tv', 'goya', 'magritte', 'magritte_2', 'monet', 'monet_2', 'levitan', 'malevich']);
+  const IOT_TYPES = {
+    on: 'devices.capabilities.on_off', volume: 'devices.capabilities.range',
+    brightness: 'devices.capabilities.range', temperature: 'devices.capabilities.range',
+    color: 'devices.capabilities.color_setting', mute: 'devices.capabilities.toggle',
+    pause: 'devices.capabilities.toggle', channel: 'devices.capabilities.range',
+    input_source: 'devices.capabilities.mode', fan_speed: 'devices.capabilities.mode',
+    keep_warm: 'devices.capabilities.toggle', ionization: 'devices.capabilities.toggle',
+    work_speed: 'devices.capabilities.mode', swing: 'devices.capabilities.mode'
+  };
+  const TOKEN_FILE = path.join(dataDir, 'yandex-token.txt');
 
   function defaults() {
     return { devices: [], scenes: [], poll: { enabled: false, interval: 5000 }, hosts: [], scanAt: 0 };
@@ -165,7 +194,7 @@ module.exports = (deps) => {
     return { error: 'действие не поддерживается: ' + action };
   }
 
-  function request(method, urlStr, body, timeout) {
+  function request(method, urlStr, body, timeout, hdr) {
     return new Promise((resolve, reject) => {
       let u;
       try { u = new URL(urlStr); } catch (e) { return reject(new Error('некорректный URL: ' + urlStr)); }
@@ -178,7 +207,10 @@ module.exports = (deps) => {
         method,
         timeout: timeout || 3000,
         rejectUnauthorized: false,
-        headers: payload ? { 'Content-Type': 'application/json', 'Content-Length': payload.length } : {}
+        headers: Object.assign(
+          payload ? { 'Content-Type': 'application/json', 'Content-Length': payload.length } : {},
+          hdr || {}
+        )
       }, (r) => {
         let data = '';
         r.on('data', d => { if (data.length < 20000) data += d.toString('utf8'); });
@@ -217,13 +249,481 @@ module.exports = (deps) => {
     return { ok: true, state: manualCmd(dev, action, value).state || {} };
   }
 
+  /* ---------------- Яндекс (Glagol): токен, облако, локальный WS ---------------- */
+
+  let yaDevices = null;
+  let yaTokenCache = null;
+
+  function yandexToken() {
+    if (yaTokenCache !== null) return yaTokenCache;
+    const env = process.env.KANBAN_YANDEX_TOKEN;
+    if (env) return (yaTokenCache = env);
+    try { yaTokenCache = String(fs.readFileSync(TOKEN_FILE, 'utf8')).trim(); } catch (e) { yaTokenCache = ''; }
+    return yaTokenCache;
+  }
+
+  function setYandexToken(token) {
+    yaTokenCache = String(token || '').trim();
+    try {
+      if (yaTokenCache) fs.writeFileSync(TOKEN_FILE, yaTokenCache, { mode: 0o600 });
+      else { try { fs.unlinkSync(TOKEN_FILE); } catch (e) {} }
+      return true;
+    } catch (e) { return false; }
+  }
+
+  function yaReq(method, urlStr, body, timeout) {
+    const t = yandexToken();
+    return request(method, urlStr, body, timeout || 5000, t ? { Authorization: 'OAuth ' + t } : {});
+  }
+
+  function yaNeeded() {
+    return { error: 'Нужен токен Яндекса (OAuth x_token): POST /api/smart/config {yandexToken} или KANBAN_YANDEX_TOKEN в окружении', code: 501 };
+  }
+
+  async function yaRefreshDevices() {
+    if (!yandexToken()) return null;
+    const r = await yaReq('GET', 'https://iot.quasar.yandex.ru/m/v3/user/devices', undefined, 9000);
+    if (r.status >= 400 || !r.json || r.json.status !== 'ok') return null;
+    const list = [];
+    for (const house of (r.json.households || [])) list.push(...((house.all) || []));
+    const byCloud = new Map();
+    const byDId = new Map();
+    for (const d of list) {
+      byCloud.set(String(d.id), d);
+      const did = (d.quasar_info || {}).device_id;
+      if (did) byDId.set(String(did).toLowerCase(), d);
+    }
+    yaDevices = { ts: Date.now(), list, byCloud, byDId };
+    return yaDevices;
+  }
+
+  async function yaDeviceOf(dev, force) {
+    if (!yaDevices || force || Date.now() - yaDevices.ts > 60000) await yaRefreshDevices();
+    if (!yaDevices) return null;
+    const meta = dev.meta || {};
+    const did = String(meta.deviceId || meta.device_id || '');
+    if (did && yaDevices.byDId.has(did.toLowerCase())) return yaDevices.byDId.get(did.toLowerCase());
+    const cid = String(meta.cloudId || '');
+    if (cid && yaDevices.byCloud.has(cid)) return yaDevices.byCloud.get(cid);
+    return yaDevices.list.find(d => String(d.name || '').trim().toLowerCase() === String(dev.name || '').trim().toLowerCase()) || null;
+  }
+
+  function yaStateOf(cd) {
+    const st = {};
+    if (!cd) return st;
+    for (const cap of (cd.capabilities || [])) {
+      const s = cap.state || {};
+      const inst = s.instance;
+      const v = s.value;
+      if (cap.type === 'devices.capabilities.on_off' && inst === 'on') st.on = !!v;
+      else if (cap.type === 'devices.capabilities.range' && inst === 'volume') st.volume = Number(v);
+      else if (cap.type === 'devices.capabilities.range' && inst === 'brightness') st.brightness = Number(v);
+      else if (cap.type === 'devices.capabilities.range' && inst === 'temperature') st.temperature = Number(v);
+      else if (cap.type === 'devices.capabilities.toggle' && inst === 'mute') st.mute = !!v;
+      else if (cap.type === 'devices.capabilities.toggle' && inst === 'pause') st.pause = !!v;
+      else if (cap.type === 'devices.capabilities.range' && inst === 'channel') st.channel = Number(v);
+    }
+    return st;
+  }
+
+  async function yaAction(cd, instance, value, relative) {
+    const action = {
+      type: IOT_TYPES[instance] || 'devices.capabilities.custom.button',
+      state: { instance, value }
+    };
+    if (relative) action.state.relative = true;
+    const url = 'https://iot.quasar.yandex.ru/m/user/' + (cd.item_type || 'device') + 's/' + cd.id + '/actions';
+    const r = await yaReq('POST', url, { actions: [action] }, 6000);
+    if (r.status >= 400) return { error: 'Яндекс: ' + r.status + ' ' + String(r.text || '').slice(0, 140) };
+    try {
+      const g = await yaReq('GET', 'https://iot.quasar.yandex.ru/m/user/' + (cd.item_type || 'device') + 's/' + cd.id, undefined, 6000);
+      if (g.json) {
+        const nd = g.json.device || g.json;
+        if (nd && nd.capabilities && yaDevices) yaDevices.byCloud.set(String(cd.id), nd);
+      }
+    } catch (e) {}
+    const st = yaStateOf(yaDevices && yaDevices.byCloud ? (yaDevices.byCloud.get(String(cd.id)) || cd) : cd);
+    return { ok: true, state: st };
+  }
+
+  async function yaSpeak(dev, text, isTts) {
+    const cd = await yaDeviceOf(dev, true);
+    if (!cd) return { error: 'станция не найдена у Яндекса (укажите deviceId или имя устройства)', code: 404 };
+    const textStr = String(text || '').trim();
+    if (!textStr) return { error: 'пустой текст' };
+    const cap = isTts
+      ? { type: 'devices.capabilities.quasar', state: { instance: 'tts', value: { text: textStr } } }
+      : { type: 'devices.capabilities.quasar.server_action', state: { instance: 'text_action', value: textStr } };
+    const stamp = Date.now().toString(36);
+    const payload = {
+      name: 'assist ' + stamp,
+      icon: 'home',
+      triggers: [{ trigger: { type: 'scenario.trigger.voice', value: 'ассистент ' + stamp } }],
+      steps: [{
+        type: 'scenarios.steps.actions.v2',
+        parameters: { items: [{ id: cd.id, type: 'step.action.item.device', value: { id: cd.id, item_type: cd.item_type || 'device', capabilities: [cap] } }] }
+      }]
+    };
+    const create = await yaReq('POST', 'https://iot.quasar.yandex.ru/m/user/scenarios', payload, 8000);
+    if (create.status >= 400 || !create.json || create.json.status !== 'ok') {
+      return { error: 'Не удалось создать сценарий: ' + create.status + ' ' + String(create.text || '').slice(0, 140) };
+    }
+    const sid = create.json.id;
+    try {
+      const run = await yaReq('POST', 'https://iot.quasar.yandex.ru/m/user/scenarios/' + sid + '/actions', undefined, 9000);
+      if (run.status >= 400) return { error: 'Не удалось запустить: ' + run.status };
+      return { ok: true, text: isTts ? 'сказано' : 'команда отправлена' };
+    } finally {
+      try { await yaReq('DELETE', 'https://iot.quasar.yandex.ru/m/user/scenarios/' + sid, undefined, 5000); } catch (e) {}
+    }
+  }
+
+  /* минимальный WebSocket-клиент (RFC 6455) для локального указания станции */
+  function wsAcceptKey(key) {
+    return crypto.createHash('sha1').update(key + '258EAFA5-E914-47DA-95CA-C5AB0DC85B11').digest('base64');
+  }
+
+  class GlagolSocket {
+    constructor(host, port, timeout) { this.host = host; this.port = port; this.timeout = timeout || 6000; this.buf = Buffer.alloc(0); }
+    open() {
+      return new Promise((resolve, reject) => {
+        const key = crypto.randomBytes(16).toString('base64');
+        const sock = (this.sock = net.createConnection({ host: this.host, port: this.port }));
+        sock.setTimeout(this.timeout);
+        sock.on('connect', () => {
+          sock.write('GET / HTTP/1.1\r\n' +
+            'Host: ' + this.host + ':' + this.port + '\r\n' +
+            'Upgrade: websocket\r\nConnection: Upgrade\r\n' +
+            'Sec-WebSocket-Version: 13\r\n' +
+            'Sec-WebSocket-Key: ' + key + '\r\n' +
+            'Sec-WebSocket-Protocol: srvx_0.2\r\n' +
+            'Origin: http://' + this.host + '\r\n\r\n');
+        });
+        sock.on('data', d => {
+          this.buf = Buffer.concat([this.buf, d]);
+          if (!this.handshaked) {
+            const i = this.buf.indexOf('\r\n\r\n');
+            if (i < 0) return;
+            const head = this.buf.slice(0, i).toString('latin1');
+            if (!/^HTTP\/1\.1 101/i.test(head)) return reject(new Error('WS: ' + head.split('\r\n')[0]));
+            this.buf = this.buf.slice(i + 4);
+            this.handshaked = true;
+            this.queue = [];
+            resolve(this);
+          }
+          this.frames();
+        });
+        sock.on('error', reject);
+        sock.on('timeout', () => reject(new Error('ws timeout')));
+      });
+    }
+    frames() {
+      let off = 0;
+      while (true) {
+        if (this.buf.length - off < 2) break;
+        const b0 = this.buf[off], b1 = this.buf[off + 1];
+        const op = b0 & 0x0f;
+        let len = b1 & 0x7f, p = off + 2;
+        if (len === 126) { if (this.buf.length - off < 4) break; len = this.buf.readUInt16BE(p); p += 2; }
+        else if (len === 127) { if (this.buf.length - off < 10) break; len = Number(this.buf.readBigUInt64BE(p)); p += 8; }
+        if (len < 0 || this.buf.length < p + len) break;
+        const payload = this.buf.slice(p, p + len);
+        off = p + len;
+        if (op === 1) { try { this.queue.push(JSON.parse(payload.toString('utf8'))); } catch (e) {} }
+        else if (op === 8) { try { this.sock.end(); } catch (e) {} return; }
+        else if (op === 9) { try { this.sendRaw(10, payload); } catch (e) {} }
+      }
+      this.buf = this.buf.slice(off);
+      if (this.queue.length) { const q = this.queue.splice(0); for (const m of q) { if (this.onmsg) { try { this.onmsg(m); } catch (e) {} } } }
+    }
+    sendRaw(op, payload) {
+      const mask = crypto.randomBytes(4);
+      const masked = Buffer.alloc(payload.length);
+      for (let i = 0; i < payload.length; i++) masked[i] = payload[i] ^ mask[i % 4];
+      let head;
+      if (payload.length < 126) head = Buffer.from([0x80 | op, 0x80 | payload.length]);
+      else if (payload.length < 65536) { head = Buffer.alloc(4); head[0] = 0x80 | op; head[1] = 0x80 | 126; head.writeUInt16BE(payload.length, 2); }
+      else { head = Buffer.alloc(10); head[0] = 0x80 | op; head[1] = 0x80 | 127; head.writeBigUInt64BE(BigInt(payload.length), 2); }
+      this.sock.write(Buffer.concat([head, mask, masked]));
+    }
+    send(obj) { this.sendRaw(1, Buffer.from(JSON.stringify(obj))); }
+    close() { try { this.sendRaw(8, Buffer.alloc(0)); } catch (e) {} try { this.sock.destroy(); } catch (e) {} }
+  }
+
+  async function glagolDeviceToken(dev) {
+    const did = dev.meta && (dev.meta.deviceId || dev.meta.device_id);
+    const platform = dev.meta && dev.meta.platform;
+    if (!did || !platform) throw new Error('у устройства нет deviceId/platform');
+    const u = new URL('https://quasar.yandex.net/glagol/token');
+    u.searchParams.set('device_id', String(did));
+    u.searchParams.set('platform', String(platform));
+    const r = await yaReq('GET', u.toString(), undefined, 6000);
+    if (r.status !== 200 || !r.json || r.json.status !== 'ok') throw new Error('token: HTTP ' + r.status);
+    return r.json.token;
+  }
+
+  async function glagolLocal(dev, payloadCmd) {
+    const host = dev.meta && dev.meta.host;
+    const port = Number(dev.meta && (dev.meta.port || 1961)) || 1961;
+    if (!host) throw new Error('у устройства не указан IP станции (meta.host)');
+    const token = await glagolDeviceToken(dev).then(t => t).catch(e => { throw new Error(e.message); });
+    const ws = new GlagolSocket(host, port, 6000);
+    await ws.open();
+    const mid = uid('w_');
+    const reply = new Promise((resolve) => {
+      const t = setTimeout(() => resolve(null), 6000);
+      ws.onmsg = (msg) => {
+        if (msg && (msg.requestId === mid || msg.status)) { clearTimeout(t); resolve(msg); }
+      };
+    });
+    ws.send({ conversationToken: token, id: mid, payload: payloadCmd, sentTime: Date.now() });
+    const out = await reply;
+    ws.close();
+    return out;
+  }
+
+  async function glagolPoll(dev) {
+    if (!yandexToken()) return null;
+    try { const cd = await yaDeviceOf(dev); return cd ? yaStateOf(cd) : null; } catch (e) { return null; }
+  }
+
+  async function glagolCmd(dev, action, value) {
+    const a = String(action || '').toLowerCase();
+    if (!yandexToken()) return yaNeeded();
+    if (a === 'say' || a === 'tts') {
+      return Object.assign({ ok: true }, await yaSpeak(dev, value, true));
+    }
+    if (a === 'command' || a === 'alice') {
+      const text = String(value == null ? '' : value);
+      if (!text.trim()) return { error: 'пустой текст команды' };
+      if (dev.meta && dev.meta.host) {
+        try {
+          const r = await glagolLocal(dev, { command: 'sendText', text });
+          return { ok: !!r, text: 'отправлено на станцию' };
+        } catch (e) { /* падаем в облако */ }
+      }
+      const r = await yaSpeak(dev, text, false);
+      if (r.error) return r;
+      return { ok: true };
+    }
+    const cd = await yaDeviceOf(dev, true);
+    if (!cd) return { error: 'устройство не найдено у Яндекса (укажите deviceId в meta)', code: 404 };
+    const base = { on: cd => cd && yaStateOf(cd).on === undefined ? true : !!(cd && yaStateOf(cd).on) };
+    if (a === 'on' || a === 'off' || a === 'toggle') {
+      const cur = dev.state && typeof dev.state.on === 'boolean' ? dev.state.on : base.on(cd);
+      return yaAction(cd, 'on', a === 'on' ? true : a === 'off' ? false : !cur);
+    }
+    if (a === 'volume') {
+      let val = Number(value), relative = false;
+      if (typeof value === 'string' && /^[+-]/.test(value.trim())) { val = Number(value); relative = true; }
+      if (!Number.isFinite(val) && !relative) return { error: 'нужно число для громкости' };
+      return yaAction(cd, 'volume', val, relative);
+    }
+    if (a === 'brightness') {
+      const val = Number(value);
+      if (!Number.isFinite(val)) return { error: 'нужно число для яркости' };
+      return yaAction(cd, 'brightness', val);
+    }
+    if (a === 'set' && value && typeof value === 'object') {
+      let last = null;
+      for (const [k, v] of Object.entries(value)) { last = await yaAction(cd, k, v); if (last.error) return last; }
+      return last || { ok: true, state: yaStateOf(yaDevices.byCloud.get(String(cd.id)) || cd) };
+    }
+    if (IOT_TYPES[a]) return yaAction(cd, a, value === undefined ? true : value);
+    return { error: 'неизвестное действие: ' + action, code: 400 };
+  }
+
+  /* ---------------- mDNS / SSDP: обнаружение станций и устройств ---------------- */
+
+  function parseTxt(rd) {
+    const out = {};
+    let i = 0;
+    while (i < rd.length) {
+      const len = rd[i++];
+      if (!len || i + len > rd.length) break;
+      const s = rd.slice(i, i + len).toString('utf8');
+      const eq = s.indexOf('=');
+      if (eq > 0) out[s.slice(0, eq).toLowerCase()] = s.slice(eq + 1);
+      i += len;
+    }
+    return out;
+  }
+
+  function dnsName(buf, off) {
+    const labels = [];
+    let next = null, p = off, guard = 0;
+    while (p < buf.length && guard++ < 64) {
+      const len = buf[p];
+      if (len === 0) { p++; break; }
+      if ((len & 0xc0) === 0xc0) {
+        if (next === null) next = p + 2;
+        p = ((len & 0x3f) << 8) | buf[p + 1];
+        continue;
+      }
+      p++;
+      if (p + len > buf.length) break;
+      labels.push(buf.slice(p, p + len).toString('utf8'));
+      p += len;
+    }
+    return { name: labels.join('.').toLowerCase(), next: next === null ? p : next };
+  }
+
+  function encodeQName(name) {
+    const parts = [];
+    for (const label of String(name).split('.')) {
+      const b = Buffer.from(label);
+      parts.push(Buffer.from([b.length]), b);
+    }
+    parts.push(Buffer.from([0]));
+    return Buffer.concat(parts);
+  }
+
+  function isLanIp(ip) {
+    const m = String(ip || '').match(/^(\d+)\.(\d+)\.(\d+)\.(\d+)$/);
+    if (!m) return false;
+    const a = +m[1], b = +m[2];
+    if (a === 10 || (a === 192 && b === 168) || (a === 172 && b >= 16 && b <= 31)) return true;
+    return false;
+  }
+
+  function mdnsDiscover(timeout) {
+    return new Promise((resolve) => {
+      const byService = new Map();
+      const srcIps = new Map();
+      const s = dgram.createSocket({ type: 'udp4', reuseAddr: true });
+      const queries = [
+        ['_services._dns-sd._udp.local', 12], ['_yandexio._tcp.local', 12], ['_yandex-station._tcp.local', 12],
+        ['_yandexreceiver._tcp.local', 12], ['_yanex._tcp.local', 12], ['_googlecast._tcp.local', 12],
+        ['_hap._tcp.local', 12], ['_tuya._tcp.local', 12], ['_mqtt._tcp.local', 12]
+      ];
+      const finish = () => {
+        try { s.close(); } catch (e) {}
+        const hosts = new Map();
+        for (const [inst, svc] of byService) {
+          if (!svc || !svc.port) continue;
+          const m = inst.match(/\.(_[\w-]+\._tcp)\.local$/i);
+          const stype = m ? m[1] : '';
+          const ip = svc.ip || (srcIps.get(inst) || '').split(',')[0];
+          if (!isLanIp(ip)) continue;
+          let h = hosts.get(ip);
+          if (!h) hosts.set(ip, h = { ip, hostname: svc.target || '', services: [] });
+          h.services.push({ type: stype, port: svc.port, name: inst, txt: svc.txt || {} });
+        }
+        resolve(Array.from(hosts.values()));
+      };
+      const total = timeout || 5000;
+      const timer = setTimeout(finish, total);
+      const waves = [80, 1300, 2600, 3800];
+      s.on('message', (m, ri) => {
+        if (m.length < 12) return;
+        let off = 12;
+        const qd = m.readUInt16BE(4), an = m.readUInt16BE(6), ar = m.readUInt16BE(8);
+        for (let i = 0; i < qd && off < m.length; i++) { off = dnsName(m, off).next; off += 4; }
+        for (let i = 0; i < an + ar && off + 10 < m.length; i++) {
+          const nm = dnsName(m, off); off = nm.next;
+          const type = m.readUInt16BE(off), rdlen = m.readUInt16BE(off + 8);
+          off += 10;
+          const rdOff = off; off += rdlen;
+          if (type === 1 && rdlen === 4) {
+            const ip = Array.from(m.slice(rdOff, rdOff + 4)).join('.');
+            const svc = byService.get(nm.name);
+            if (svc) svc.ip = ip;
+            srcIps.set(nm.name, ((srcIps.get(nm.name) || '') + ',' + ri.address + ',' + ip).replace(/^,/, ''));
+          } else if (type === 33 && rdlen >= 6) {
+            const port = m.readUInt16BE(rdOff + 4);
+            const target = dnsName(m, rdOff + 6).name;
+            byService.set(nm.name, Object.assign({}, byService.get(nm.name), { port, target }));
+            srcIps.set(nm.name, ((srcIps.get(nm.name) || '') + ',' + ri.address).replace(/^,/, ''));
+          } else if (type === 16) {
+            byService.set(nm.name, Object.assign({}, byService.get(nm.name), { txt: parseTxt(m.slice(rdOff, rdOff + rdlen)) }));
+            srcIps.set(nm.name, ((srcIps.get(nm.name) || '') + ',' + ri.address).replace(/^,/, ''));
+          }
+        }
+      });
+      const sendQueries = () => {
+        for (const [n, t] of queries) {
+          const q = Buffer.concat([
+            Buffer.from([0x12, 0x34, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]),
+            encodeQName(n), Buffer.from([0x00, t, 0x00, 0x01])
+          ]);
+          try { s.send(q, 5353, '224.0.0.251', () => {}); } catch (e) {}
+        }
+      };
+      s.on('error', () => clearTimeout(timer));
+      s.bind(5353, () => {
+        try {
+          s.addMembership('224.0.0.251');
+          s.setMulticastTTL(2);
+          s.setMulticastLoopback(true);
+        } catch (e) {}
+        sendQueries();
+        for (const w of waves) setTimeout(sendQueries, w);
+      });
+    });
+  }
+
+  function ssdpDiscover(timeout) {
+    return new Promise((resolve) => {
+      const hosts = new Map();
+      const s = dgram.createSocket({ type: 'udp4', reuseAddr: true });
+      const msg = Buffer.from('M-SEARCH * HTTP/1.1\r\n' +
+        'HOST: 239.255.255.250:1900\r\n' + 'MAN: "ssdp:discover"\r\n' +
+        'MX: 2\r\n' + 'ST: ssdp:all\r\n' + 'USER-AGENT: KabanSmart/1.0 smart.js\r\n\r\n');
+      const finish = () => {
+        try { s.close(); } catch (e) {}
+        resolve(Array.from(hosts.values()));
+      };
+      const timer = setTimeout(finish, timeout || 2500);
+      s.on('message', (m, ri) => {
+        const txt = m.toString('latin1');
+        if (!/^HTTP\/1\.[01]\s+200/i.test(txt)) return;
+        let h = hosts.get(ri.address);
+        if (!h) hosts.set(ri.address, h = { ip: ri.address, services: [], location: '' });
+        const loc = (txt.match(/^LOCATION:\s*([^\s]+)/mi) || [])[1] || '';
+        if (loc) h.location = loc;
+        const st = (txt.match(/^ST:\s*(.+)$/mi) || [])[1] || '';
+        const usn = (txt.match(/^USN:\s*(.+)$/mi) || [])[1] || '';
+        h.services.push({ type: 'ssdp:' + st, usn });
+        s.send(msg, 1900, ri.address, () => {});
+      });
+      s.on('error', () => clearTimeout(timer));
+      s.bind(0, () => {
+        try { s.addMembership('239.255.255.250'); s.setMulticastTTL(2); s.setMulticastLoopback(true); } catch (e) {}
+        s.send(msg, 1900, '239.255.255.250', () => {});
+      });
+    });
+  }
+
+  async function lanDiscover() {
+    const [m, ss] = await Promise.all([mdnsDiscover(4000), ssdpDiscover(2200)]);
+    const out = new Map();
+    for (const h of m) out.set(h.ip, h);
+    for (const h of ss) {
+      const x = out.get(h.ip);
+      if (x) x.ssdp = h.services;
+      else out.set(h.ip, Object.assign({ ip: h.ip, hostname: '', services: [], ssdp: h.services, txt: {} }, { services: [] }));
+    }
+    return Array.from(out.values());
+  }
+
+  function platformName(p) {
+    const v = YANDEX_PLATFORMS[p];
+    return (v && v[1]) || '';
+  }
+
+  function stationKindOf(host) {
+    const p = host.platform || '';
+    if (!p) return '';
+    return (p === 'yandex_tv' || YANDEX_TV_KEYS.has(p) || /^yandex_tv/.test(p)) ? 'media' : 'station';
+  }
+
   const ADAPTERS = {
     manual: { poll: null, cmd: manualCmd },
     webhook: { poll: null, cmd: httpCmd },
     http: { poll: httpPoll, cmd: httpCmd },
-    glagol: { stub: 'Адаптер Glagol появится на этапе 2 (управление станцией в LAN).' },
+    glagol: { poll: glagolPoll, cmd: glagolCmd },
     tuya: { stub: 'Адаптер Tuya LAN появится на этапе 3 (нужен локальный ключ устройства).' },
-    voice: { stub: 'Голосовые команды станции появятся на этапе 3.' },
+    voice: { stub: 'Голосовые команды станции работают через glagol: smart say/command.' },
     mqtt: { stub: 'MQTT-адаптер появится на этапе 3 (нужен адрес брокера).' }
   };
 
@@ -446,6 +946,14 @@ module.exports = (deps) => {
   function suggestionsOf(host) {
     const out = [];
     const ports = host.ports || [];
+    const mports = host.mports || [];
+    if ((host.deviceId || host.platform || mports.includes(1961) || ports.includes(1961))) {
+      const pn = platformName(host.platform);
+      const kind = stationKindOf(host) || (host.platform ? 'station' : '');
+      const meta = { deviceId: host.deviceId || '', platform: host.platform || '' };
+      if (mports[0] || ports.includes(1961)) meta.port = mports[0] || 1961;
+      out.push({ kind: kind || 'station', adapter: 'glagol', name: pn || 'Яндекс Станция', meta });
+    }
     if (ports.includes(1337)) out.push({ kind: 'station', adapter: 'glagol', name: 'Алиса (станция)' });
     if (ports.some(p => p === 6666 || p === 6667 || p === 6668) || (host.marks || []).includes('tuya')) {
       out.push({ kind: 'plug', adapter: 'tuya', name: 'Tuya-устройство', soon: 'этап 3' });
@@ -481,9 +989,24 @@ module.exports = (deps) => {
     (async () => {
       const found = new Map();
       const get = (ip) => {
-        if (!found.has(ip)) found.set(ip, { ip, ports: [], marks: [], title: '', server: '', alive: false, ts: Date.now() });
+        if (!found.has(ip)) found.set(ip, { ip, ports: [], mports: [], marks: [], title: '', server: '', alive: false, ts: Date.now() });
         return found.get(ip);
       };
+      emit({ type: 'scan', phase: 'progress', stage: 'discovery', done: 0, total: 1 });
+      const discovered = await lanDiscover();
+      for (const h of discovered) {
+        const rec = get(h.ip);
+        rec.alive = true;
+        rec.mports = h.services.filter(s => s.port).map(s => s.port);
+        const yio = h.services.find(s => /yandexio|yandex-station|yanex|yandexreceiver/i.test(s.type)) || h.services[0];
+        const txt = yio && yio.txt ? yio.txt : {};
+        if (txt.deviceId) rec.deviceId = txt.deviceId;
+        if (txt.platform) rec.platform = txt.platform;
+        if (h.hostname && !rec.mdns) rec.mdns = h.hostname;
+        if (!rec.title) rec.title = platformName(txt.platform) || h.hostname || rec.mdns || '';
+        if (h.services.some(s => s.type === '_googlecast._tcp.local')) rec.marks.push('chromecast');
+      }
+      emit({ type: 'scan', phase: 'progress', stage: 'discovery', done: 1, total: 1 });
       let pingDone = 0;
       emit({ type: 'scan', phase: 'progress', stage: 'ping', done: 0, total: targets.length });
       await pool(targets, 64, async (ip) => {
@@ -517,9 +1040,9 @@ module.exports = (deps) => {
       });
       const macs = await neighMap();
       const hosts = Array.from(found.values())
-        .filter(h => h.alive || h.ports.length)
+        .filter(h => h.alive || h.ports.length || h.mports.length)
         .map(h => Object.assign({}, h, { mac: macs[h.ip] || '' }));
-      hosts.sort((a, b) => b.ports.length - a.ports.length || Number(b.alive) - Number(a.alive) || a.ip.localeCompare(b.ip));
+      hosts.sort((a, b) => (b.ports.length + b.mports.length) - (a.ports.length + a.mports.length) || Number(b.alive) - Number(a.alive) || a.ip.localeCompare(b.ip));
       const aliveSet = new Set(hosts.map(h => h.ip));
       store.hosts = hosts.slice(0, HOSTS_MAX);
       store.scanAt = Date.now();
@@ -534,7 +1057,8 @@ module.exports = (deps) => {
         type: 'scan', phase: 'done', total: targets.length, found: hosts.length,
         withPorts: hosts.filter(h => h.ports.length).length,
         hosts: store.hosts.slice(0, 32).map(h => ({
-          ip: h.ip, ports: h.ports, mac: h.mac, title: h.title, alive: h.alive,
+          ip: h.ip, ports: h.ports, mports: h.mports, mac: h.mac, title: h.title,
+          deviceId: h.deviceId || '', platform: h.platform || '', alive: h.alive,
           suggest: suggestionsOf(h)
         }))
       });
@@ -568,6 +1092,19 @@ module.exports = (deps) => {
     }));
   }
 
+  function metaFromBody(body, prevMeta) {
+    const m = body.meta && typeof body.meta === 'object' ? body.meta : {};
+    const out = Object.assign({}, prevMeta || {});
+    if (m.cmdUrl !== undefined) out.cmdUrl = String(m.cmdUrl || '').slice(0, 300);
+    if (m.pollUrl !== undefined) out.pollUrl = String(m.pollUrl || '').slice(0, 300);
+    if (m.deviceId !== undefined) out.deviceId = String(m.deviceId || '').slice(0, 80);
+    if (m.platform !== undefined) out.platform = String(m.platform || '').slice(0, 40);
+    if (m.cloudId !== undefined) out.cloudId = String(m.cloudId || '').slice(0, 80);
+    if (m.host !== undefined) out.host = String(m.host || '').slice(0, 40);
+    if (m.port !== undefined) out.port = String(m.port || '').slice(0, 12);
+    return out;
+  }
+
   function addDevice(body) {
     const name = String(body.name || '').trim().slice(0, 60);
     if (!name) return { error: 'нужно название устройства' };
@@ -579,10 +1116,9 @@ module.exports = (deps) => {
       dev.ip = String(body.ip || '').trim().slice(0, 40);
       dev.port = String(body.port || '').trim().slice(0, 12);
       dev.notes = String(body.notes || '').trim().slice(0, 200);
-      dev.meta = body.meta && typeof body.meta === 'object' ? {
-        cmdUrl: String(body.meta.cmdUrl || '').slice(0, 300),
-        pollUrl: String(body.meta.pollUrl || '').slice(0, 300)
-      } : (dev.meta || {});
+      const prevMeta = dev.meta || {};
+      const m = metaFromBody(body, prevMeta);
+      if (m) dev.meta = m;
       save();
       emit({ type: 'smart', kind: 'change', deviceId: dev.id, name: dev.name, text: 'Устройство обновлено: ' + dev.name });
       return { device: dev };
@@ -593,10 +1129,7 @@ module.exports = (deps) => {
       port: String(body.port || '').trim().slice(0, 12),
       mac: String(body.mac || '').trim().slice(0, 20),
       notes: String(body.notes || '').trim().slice(0, 200),
-      meta: body.meta && typeof body.meta === 'object' ? {
-        cmdUrl: String(body.meta.cmdUrl || '').slice(0, 300),
-        pollUrl: String(body.meta.pollUrl || '').slice(0, 300)
-      } : {},
+      meta: metaFromBody(body, {}) || {},
       state: {}, stateAt: 0, online: true, created: Date.now()
     };
     store.devices.push(nd);
@@ -657,13 +1190,14 @@ module.exports = (deps) => {
         scenes: store.scenes,
         poll: store.poll,
         hosts: store.hosts.map(h => ({
-          ip: h.ip, ports: h.ports, mac: h.mac, title: h.title, marks: h.marks, alive: h.alive,
+          ip: h.ip, ports: h.ports, mports: h.mports || [], mac: h.mac, title: h.title, marks: h.marks,
+          deviceId: h.deviceId || '', platform: h.platform || '', alive: h.alive,
           suggest: suggestionsOf(h), ts: h.ts
         })),
         scanAt: store.scanAt, scanning,
         events: events.slice(0, 50),
         kinds: KINDS, adapters: ADAPTER_LIST,
-        key: !!smartKey()
+        key: !!smartKey(), yandex: !!yandexToken()
       });
     }
 
@@ -679,6 +1213,13 @@ module.exports = (deps) => {
     if (p === '/api/smart/scan') {
       const ok = startScan();
       return json(res, ok ? 202 : 409, { ok, scanning, error: ok ? undefined : (scanning ? 'сканирование уже идёт' : 'нет сетевых интерфейсов') });
+    }
+
+    if (p === '/api/smart/config') {
+      if (body.yandexToken === undefined) return json(res, 200, { ok: true, yandex: !!yandexToken() });
+      const saved = setYandexToken(body.yandexToken);
+      if (!saved) return json(res, 500, { ok: false, error: 'не удалось записать токен' });
+      return json(res, 200, { ok: true, yandex: !!yandexToken() });
     }
 
     if (p === '/api/smart/cmd') {
