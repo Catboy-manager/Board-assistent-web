@@ -6,6 +6,9 @@
 
   let data = { steam: [], third: [], cfg: { steamId: '', hasKey: false }, source: '', steamAt: 0, lastError: '' };
   let sub = localStorage.getItem('kban-games-tab') || 'steam';
+  let catResults = null;
+  let catQuery = '';
+  let catBusy = false;
 
   function fmtHrs(h) {
     h = Number(h || 0);
@@ -49,9 +52,10 @@
     const box = $('sp-games');
     if (!box) return;
     document.querySelectorAll('#games-panel .st-tab[data-gs]').forEach(t => t.classList.toggle('active', t.dataset.gs === sub));
-    box.innerHTML = sub === 'steam' ? renderSteam() : renderThird();
+    box.innerHTML = sub === 'steam' ? renderSteam() : sub === 'third' ? renderThird() : renderCatalog();
     bindSteam();
     bindThird();
+    bindCatalog();
   }
 
   function cfgOpen() {
@@ -129,12 +133,90 @@
         <button class="gm-btn gm-badge gm-b-del" data-t3="del" title="Удалить">✕</button>
       </div>
       <div class="gm-name" title="${esc(g.title)}">${esc(g.title)}</div>
-      <div class="gm-meta">${g.played ? '✅ сыграна' : '📥 в планах'}${g.hours ? ' · ' + fmtHrs(g.hours) : ''}</div>
+      <div class="gm-meta">${g.played ? '✅ сыграна' : '📥 в планах'}${g.hours ? ' · ' + fmtHrs(g.hours) : ''}${g.price ? ' · ' + esc(g.price) : ''}</div>
       <div class="gm-acts">
+        ${g.store ? `<a class="gm-btn gm-store-btn" href="${esc(g.store)}" target="_blank" rel="noopener" title="Страница в магазине">ⓘ</a>` : ''}
         <button class="gm-btn" data-t3="resolve" title="Найти постер">🖼</button>
         <button class="gm-btn" data-t3="hrs" title="Указать проведённые часы">${fmtHrs(g.hours) || '0ч'}</button>
       </div>
     </div>`;
+  }
+
+  /* ---- каталог сторонних сервисов ---- */
+
+  function renderCatalog() {
+    let h = '<div class="gm-add">' +
+      '<input id="gm-cq" placeholder="Поиск в каталоге (например, Hollow Knight, Ведьмак, Dark Souls)…" value="' + esc(catQuery) + '">' +
+      '<button id="gm-cq-btn">Найти</button>' +
+      '</div>';
+    h += '<div class="gm-hint">Каталог GOG + Steam (без ключей): найдите игру (лучше по латинице) и добавьте в свою библиотеку — постер и ссылка на магазин подтянутся.</div>';
+    if (catBusy) h += '<div class="gm-st">поиск…</div>';
+    else if (catResults === null) h += '<div class="empty-state">Начните поиск в каталоге</div>';
+    else if (catResults.error) h += '<div class="gm-err">⚠ ' + esc(catResults.error) + '</div>';
+    else if (!catResults.games || !catResults.games.length) h += '<div class="empty-state">Ничего не найдено</div>';
+    else h += '<div class="gm-grid">' + catResults.games.map(catCard).join('') + '</div>';
+    return h;
+  }
+
+  function catCard(g) {
+    const ph = esc(String(g.title || '?').charAt(0).toUpperCase());
+    return `<div class="gm-card gm-cat" data-cid="${esc(g.id)}">
+      <div class="gm-post">
+        ${g.poster
+          ? `<img src="${g.poster}" data-s2="" loading="lazy" alt="">`
+          : `<div class="gm-post-ph">${ph}</div>`}
+        ${g.store ? `<a class="gm-btn gm-store" href="${esc(g.store)}" target="_blank" rel="noopener" title="Страница в магазине">ⓘ</a>` : ''}
+        <span class="gm-src">${esc(g.source || '')}</span>
+      </div>
+      <div class="gm-name" title="${esc(g.title)}">${esc(g.title)}</div>
+      <div class="gm-meta">${g.price ? esc(g.price) : ''}${g.genres && g.genres.length ? ' · ' + esc(g.genres.slice(0, 2).join(', ')) : ''}${g.devs && g.devs.length ? ' · ' + esc(g.devs[0]) : ''}</div>
+      <div class="gm-acts">
+        <button class="gm-btn" data-cadd="1" title="Добавить в библиотеку">＋ В библиотеку</button>
+      </div>
+    </div>`;
+  }
+
+  function bindCatalog() {
+    const box = $('sp-games');
+    const input = $('gm-cq'), btn = $('gm-cq-btn');
+    const doSearch = async () => {
+      if (catBusy) return;
+      const q = (input && input.value.trim()) || '';
+      if (!q) return;
+      catBusy = true;
+      catQuery = q;
+      render();
+      try {
+        const r = await fetch('/api/games/catalog', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ q })
+        });
+        catResults = await r.json();
+      } catch (e) { catResults = { error: 'поиск не удался: ' + (e.message || '') }; }
+      catBusy = false;
+      render();
+    };
+    if (btn) btn.onclick = doSearch;
+    if (input) input.addEventListener('keydown', e => { if (e.key === 'Enter') doSearch(); });
+    box.querySelectorAll('.gm-card.gm-cat [data-cadd]').forEach(b => b.onclick = async () => {
+      const card = b.closest('.gm-card.gm-cat');
+      const g = (catResults.games || []).find(x => String(x.id) === card.getAttribute('data-cid'));
+      if (!g) return;
+      b.disabled = true; b.textContent = '…';
+      try {
+        const r = await fetch('/api/games/third', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ title: g.title, poster: g.poster || '', store: g.store || '', price: g.price || '' })
+        });
+        const d = await r.json();
+        if (d && d.game) {
+          try { window.APP.toast('Игры', 'Добавлено: ' + g.title); } catch (e) {}
+          b.textContent = '✓ Добавлено';
+          setTimeout(() => { b.disabled = false; b.textContent = '＋ В библиотеку'; }, 2000);
+        }
+      } catch (e) { b.disabled = false; b.textContent = '＋ В библиотеку'; }
+    });
+    wirePosterFallback(box);
   }
 
   function wirePosterFallback(box) {

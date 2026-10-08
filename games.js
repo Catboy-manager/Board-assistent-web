@@ -159,16 +159,128 @@ module.exports = (deps) => {
     throw err || new Error(lastError);
   }
 
+  /* ---- Поиск в каталоге сторонних сервисов (без ключей): GOG + Steam Store ---- */
+  /* GOG: https://catalog.gog.com/v1/catalog?query=…&itemType=game (публичный, без авторизации).
+     Steam: https://store.steampowered.com/api/storesearch/?term=…&l=ru&cc=ru (без ключа).
+     Оба ищут только по латинице — кириллический запрос транслитерируем запасным термином. */
+
+  const GOG_CATALOG = 'https://catalog.gog.com/v1/catalog?limit=12&itemType=game&query=';
+
+  /* Русское название → англ. поисковый термин (переводы, не ложащиеся на транслит) */
+  const ALIASES = {
+    'ведьмак': 'witcher', 'киберпанк': 'cyberpunk', 'призрачная свобода': 'phantom liberty',
+    'витчер': 'witcher', 'хитман': 'hitman', 'фар край': 'far cry', 'кризис': 'crysis',
+    'элден ринг': 'elden ring', 'дивити': 'divinity', 'мафия': 'mafia', 'сталкер': 'stalker'
+  };
+
+  function translit(s) {
+    const M = { 'а':'a','б':'b','в':'v','г':'g','д':'d','е':'e','ё':'e','ж':'zh','з':'z','и':'i','й':'y','к':'k','л':'l','м':'m','н':'n','о':'o','п':'p','р':'r','с':'s','т':'t','у':'u','ф':'f','х':'h','ц':'c','ч':'ch','ш':'sh','щ':'sch','ъ':'','ы':'y','ь':'','э':'e','ю':'yu','я':'ya',
+      'А':'A','Б':'B','В':'V','Г':'G','Д':'D','Е':'E','Ё':'E','Ж':'Zh','З':'Z','И':'I','Й':'Y','К':'K','Л':'L','М':'M','Н':'N','О':'O','П':'P','Р':'R','С':'S','Т':'T','У':'U','Ф':'F','Х':'H','Ц':'C','Ч':'Ch','Ш':'Sh','Щ':'Sch','Ъ':'','Ы':'Y','Ь':'','Э':'E','Ю':'Yu','Я':'Ya' };
+    return String(s).replace(/[а-яА-ЯёЁ]/g, ch => M[ch] || ch);
+  }
+
+  function rub(price) {
+    const v = price && price.final;
+    if (v === undefined || v === null) return '';
+    const n = Number(v);
+    if (!Number.isFinite(n)) return String(v || '').slice(0, 40);
+    return (n % 1000 ? Math.round(n) / 100 : Math.round(n / 100)) + ' ₽';
+  }
+
+  async function gogSearch(term) {
+    const d = await fetchJSON(GOG_CATALOG + encodeURIComponent(term));
+    if (!d) return null;
+    const list = Array.isArray(d.products) ? d.products : [];
+    return list
+      .filter(p => p.productType === 'game' && p.title)
+      .map(p => ({
+        id: String(p.id), source: 'GOG',
+        title: String(p.title).slice(0, 120),
+        store: String(p.storeLink || ('https://www.gog.com/game/' + String(p.slug || ''))).slice(0, 300),
+        poster: String(p.coverVertical || '').slice(0, 400),
+        price: (p.price && typeof p.price.final === 'string') ? p.price.final.slice(0, 40) : '',
+        genres: Array.isArray(p.genres) ? p.genres.map(x => (typeof x === 'string' ? x : (x && x.name) || '')).filter(Boolean).slice(0, 3) : [],
+        devs: Array.isArray(p.developers) ? p.developers.map(x => (typeof x === 'string' ? x : (x && x.name) || '')).filter(Boolean).slice(0, 3) : []
+      }));
+  }
+
+  async function steamSearch(term) {
+    const d = await fetchJSON('https://store.steampowered.com/api/storesearch/?l=ru&cc=ru&term=' + encodeURIComponent(term));
+    if (!d || !Array.isArray(d.items)) return null;
+    return d.items
+      .filter(x => x.type === 'app' && x.name)
+      .map(x => ({
+        id: String(x.id), source: 'Steam',
+        title: String(x.name).slice(0, 120),
+        store: 'https://store.steampowered.com/app/' + x.id + '/',
+        poster: 'https://cdn.cloudflare.steamstatic.com/steam/apps/' + x.id + '/library_600x900.jpg',
+        price: rub(x.price),
+        genres: [], devs: []
+      }));
+  }
+
+  function normTitle(s) {
+    return String(s || '').toLowerCase().replace(/[^a-zа-яё0-9]/gi, '');
+  }
+
+  async function catalogSearch(q) {
+    const term = String(q || '').trim().slice(0, 80);
+    if (!term) return [];
+    const terms = Array.from(new Set([term, translit(term), ALIASES[term.toLowerCase()] || ''].filter(Boolean)));
+    const hit = (g, t) => normTitle(g.title).includes(normTitle(t));
+    let games = [];
+    let gogUnav = false, steamUnav = false;
+
+    for (const t of terms) {
+      let gog;
+      try { gog = await gogSearch(t); } catch (e) { gog = null; }
+      if (gog === null) gogUnav = true;
+      else {
+        const matched = gog.filter(g => hit(g, t));
+        if (matched.length) { games.push(...matched); break; }
+      }
+    }
+
+    let steamCollected = [];
+    for (const t of terms) {
+      let st;
+      try { st = await steamSearch(t); } catch (e) { st = null; }
+      if (st === null) steamUnav = true;
+      else {
+        const matched = st.filter(g => hit(g, t));
+        if (matched.length) { steamCollected = matched; break; }
+      }
+    }
+
+    if (gogUnav && steamUnav && !games.length) {
+      throw new Error('Каталоги GOG и Steam недоступны — попробуйте позже');
+    }
+
+    const seen = new Set();
+    return games.concat(steamCollected).filter(g => {
+      const k = normTitle(g.title);
+      if (seen.has(k)) return false;
+      seen.add(k);
+      return true;
+    });
+  }
+
   /* ---- Сторонние (не Steam) игры, постеры как у фильмов ---- */
 
   function thirdAdd(body) {
     const title = String(body.title || '').trim().slice(0, 120);
     if (!title) return null;
     const hours = Math.max(0, Number(body.hours) || 0);
-    const rec = { id: uid(), title, poster: '', hours, played: !!body.played, added: Date.now() };
+    const rec = {
+      id: uid(), title,
+      poster: String(body.poster || '').trim().slice(0, 400),
+      store: String(body.store || '').trim().slice(0, 300),
+      price: String(body.price || '').trim().slice(0, 40),
+      hours, played: !!body.played, added: Date.now()
+    };
     store.third.unshift(rec);
     save();
-    resolveThird(rec.id);
+    if (!rec.poster) resolveThird(rec.id);
     return rec;
   }
 
@@ -223,6 +335,17 @@ module.exports = (deps) => {
       const rec = thirdAdd(body);
       if (!rec) return json(res, 400, { error: 'название обязательно' });
       return json(res, 200, { game: rec });
+    }
+
+    if (req.method === 'POST' && p === '/api/games/catalog') {
+      let body = {};
+      try { body = JSON.parse((await readBody(req)).toString() || '{}'); } catch (e) {}
+      try {
+        const list = await catalogSearch(body.q);
+        return json(res, 200, { ok: true, q: String(body.q || '').trim(), games: list });
+      } catch (e) {
+        return json(res, 200, { ok: false, error: (e && e.message) || 'не удалось найти игры' });
+      }
     }
 
     const m = p.match(/^\/api\/games\/third\/([^/]+)\/(delete|resolve|toggle|hours)$/);
