@@ -255,6 +255,7 @@
   function wireDeviceForm() {
     $('f-cancel').onclick = () => { editId = null; prefill = null; render(); };
     $('f-save').onclick = async () => {
+      const pmeta = (prefill && prefill.meta && typeof prefill.meta === 'object') ? prefill.meta : {};
       const body = {
         id: editId || undefined,
         name: $('f-name').value.trim(),
@@ -263,7 +264,7 @@
         ip: $('f-ip').value.trim(),
         port: $('f-port').value.trim(),
         notes: $('f-notes').value.trim(),
-        meta: { cmdUrl: $('f-cmd').value.trim(), pollUrl: $('f-poll').value.trim() }
+        meta: Object.assign({}, pmeta, { cmdUrl: $('f-cmd').value.trim(), pollUrl: $('f-poll').value.trim() })
       };
       if (!body.name) { toast('Умный дом', 'Укажите название устройства', true); return; }
       const r = await api('POST', '/api/smart/device', body);
@@ -274,7 +275,7 @@
 
   function openForm(id, pre) {
     editId = id;
-    prefill = pre;
+    prefill = pre || {};
     tab = 'dev';
     document.querySelectorAll('#sp-smart .sm-tab').forEach(x => x.classList.toggle('active', x.getAttribute('data-t') === 'dev'));
     document.querySelectorAll('#sp-smart .sm-pane').forEach(p => p.classList.toggle('active', p.id === 'sm-dev'));
@@ -313,14 +314,18 @@
         </div>
         <div class="sm-sub">${h.title ? esc(h.title) + ' · ' : ''}${(h.marks || []).join(', ') || ((h.ports || []).length ? 'без опознавательных знаков' : 'жив, открытых портов не найдено')}</div>
         <div class="sm-acts">${(h.suggest || []).map(s => `
-          <button class="btn mini" data-ip="${esc(h.ip)}" data-kind="${s.kind}" data-adapter="${s.adapter}" data-name="${esc(s.name)}"${s.soon ? ' title="' + esc(s.soon) + '"' : ''}>＋ ${esc(s.name)}${s.soon ? ' (' + s.soon + ')' : ''}</button>`).join('')}
-          <button class="btn mini link" data-ip="${esc(h.ip)}" data-kind="other" data-adapter="manual" data-name="${esc(h.ip)}">＋ своё</button>
+          <button class="btn mini" data-ip="${esc(h.ip)}" data-kind="${s.kind}" data-adapter="${s.adapter}" data-name="${esc(s.name)}" data-meta="${esc(JSON.stringify(s.meta || {}))}"${s.soon ? ' title="' + esc(s.soon) + '"' : ''}>＋ ${esc(s.name)}${s.soon ? ' (' + s.soon + ')' : ''}</button>`).join('')}
+          <button class="btn mini link" data-ip="${esc(h.ip)}" data-kind="other" data-adapter="manual" data-name="${esc(h.ip)}" data-meta="{}">＋ своё</button>
         </div>
       </div>`).join('');
-    box.querySelectorAll('.sm-acts [data-ip]').forEach(b => b.onclick = () => openForm(null, {
-      ip: b.getAttribute('data-ip'), kind: b.getAttribute('data-kind'),
-      adapter: b.getAttribute('data-adapter'), name: b.getAttribute('data-name')
-    }));
+    box.querySelectorAll('.sm-acts [data-ip]').forEach(b => b.onclick = () => {
+      let meta = {};
+      try { meta = JSON.parse(b.getAttribute('data-meta') || '{}'); } catch (e) {}
+      openForm(null, {
+        ip: b.getAttribute('data-ip'), kind: b.getAttribute('data-kind'),
+        adapter: b.getAttribute('data-adapter'), name: b.getAttribute('data-name'), meta
+      });
+    });
   }
 
   function renderScene() {

@@ -1106,14 +1106,21 @@ module.exports = (deps) => {
     const out = [];
     const ports = host.ports || [];
     const mports = host.mports || [];
-    if ((host.deviceId || host.platform || mports.includes(1961) || ports.includes(1961))) {
-      const pn = platformName(host.platform);
-      const kind = stationKindOf(host) || (host.platform ? 'station' : '');
-      const meta = { deviceId: host.deviceId || '', platform: host.platform || '' };
-      if (mports[0] || ports.includes(1961)) meta.port = mports[0] || 1961;
-      out.push({ kind: kind || 'station', adapter: 'glagol', name: pn || 'Яндекс Станция', meta });
+    const quasar = host.deviceId || host.platform || mports.includes(1961) || ports.includes(1961);
+    const alice1337 = ports.includes(1337);
+    if (quasar || alice1337) {
+      let meta = {};
+      if (quasar) {
+        meta = { deviceId: host.deviceId || '', platform: host.platform || '' };
+        if (mports[0] || ports.includes(1961)) meta.port = mports[0] || 1961;
+      }
+      out.push({
+        kind: stationKindOf(host) || 'station',
+        adapter: 'glagol',
+        name: quasar ? (platformName(host.platform) || 'Яндекс Станция') : 'Алиса (станция)',
+        meta
+      });
     }
-    if (ports.includes(1337)) out.push({ kind: 'station', adapter: 'glagol', name: 'Алиса (станция)' });
     if (ports.some(p => p === 6666 || p === 6667 || p === 6668) || (host.marks || []).includes('tuya')) {
       out.push({ kind: 'plug', adapter: 'tuya', name: 'Tuya-устройство', soon: 'этап 3' });
     }
@@ -1291,6 +1298,17 @@ module.exports = (deps) => {
       meta: metaFromBody(body, {}) || {},
       state: {}, stateAt: 0, online: true, created: Date.now()
     };
+    const dup = store.devices.find(x => x.adapter === adapter && nd.ip && x.ip === nd.ip && (x.meta.deviceId || '') === (nd.meta.deviceId || ''));
+    if (dup && dup.id !== nd.id) {
+      dup.name = name; dup.kind = kind; dup.adapter = adapter;
+      dup.ip = nd.ip; dup.port = nd.port; dup.mac = nd.mac; dup.notes = nd.notes;
+      const prevMeta = dup.meta || {};
+      const m = metaFromBody(body, prevMeta);
+      if (m) dup.meta = m;
+      save();
+      emit({ type: 'smart', kind: 'change', deviceId: dup.id, name: dup.name, text: 'Устройство обновлено: ' + dup.name });
+      return { device: dup, merged: true };
+    }
     store.devices.push(nd);
     enrichOnline();
     save();
