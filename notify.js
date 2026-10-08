@@ -43,12 +43,26 @@ module.exports = (deps) => {
     try { fs.writeFileSync(FILE, JSON.stringify({ history }, null, 2)); } catch (e) {}
   }
 
+  /* Сохранение истории дебаунсом: синхронная запись 129 КБ в горячем пути
+     доставки SSE задерживала все уведомления при нехватке памяти/диска. */
+  let saveTimer = null;
+  let saveDirty = false;
+
+  function scheduleSave() {
+    saveDirty = true;
+    if (saveTimer) return;
+    saveTimer = setTimeout(() => {
+      saveTimer = null;
+      if (saveDirty) { saveDirty = false; saveHistory(); }
+    }, 1500);
+  }
+
   function addNotify(item) {
     if (isIgnored(item)) return null;
     const rec = Object.assign({ id: 'n' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), ts: Date.now() }, item);
     history.unshift(rec);
     if (history.length > HISTORY_MAX) history = history.slice(0, HISTORY_MAX);
-    saveHistory();
+    scheduleSave();
     for (const c of clients) {
       try { c.write('data: ' + JSON.stringify({ type: 'phone', item: rec }) + '\n\n'); } catch (e) { clients.delete(c); }
     }
