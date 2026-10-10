@@ -245,7 +245,11 @@
         const act = b.getAttribute('data-act');
         if (act === 'edit') openForm(id, null);
         if (act === 'del') {
-          if (!confirm('Удалить устройство?')) return;
+          if (b.dataset.arm !== '1') {
+            b.dataset.arm = '1'; b.textContent = 'Точно?'; b.classList.add('danger');
+            setTimeout(() => { b.dataset.arm = ''; b.textContent = '🗑'; b.classList.remove('danger'); }, 4000);
+            return;
+          }
           const r = await api('POST', '/api/smart/device/' + id + '/delete', {});
           if (r.status === 200) refresh(); else toast('Умный дом', (r.d && r.d.error) || 'ошибка', true);
         }
