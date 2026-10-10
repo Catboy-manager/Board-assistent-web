@@ -167,6 +167,33 @@
     return list.map(d => `<option value="${d.id}"${d.id === sel ? ' selected' : ''}>${esc(d.name)}</option>`).join('');
   }
 
+  function kindBtns(d) {
+    const stub = d.stub ? ` disabled title="${esc(d.stub)}"` : '';
+    const k = d.kind || 'other';
+    const p = ['on', 'off'].map(a => `<button class="btn mini" data-cmd="${a}"${stub}>${a === 'on' ? 'Вкл' : 'Выкл'}</button>`).join('');
+    const tog = `<button class="btn mini" data-cmd="toggle"${stub}>⇄</button>`;
+    const parts = [];
+    if (k === 'kettle') {
+      parts.push(`<button class="btn mini" data-cmd="on"${stub}>☕ Вскипятить</button>`);
+      parts.push(`<button class="btn mini" data-cmd="off"${stub}>Выключить</button>`);
+      parts.push(tog);
+    } else if (k === 'sensor') {
+      parts.push(`<button class="btn mini" data-cmd="state" data-val="{}"${stub}>🔁 Опросить</button>`);
+    } else {
+      parts.push(p, tog);
+    }
+    if (k === 'lamp' && d.adapter === 'glagol') {
+      parts.push(`<button class="btn mini" data-cmd="brightness" data-val="+10"${stub} title="Ярче">▲</button>`);
+      parts.push(`<button class="btn mini" data-cmd="brightness" data-val="-10"${stub} title="Тусклее">▼</button>`);
+    }
+    if (k === 'station' && d.adapter === 'glagol') {
+      parts.push(`<button class="btn mini" data-cmd="say" data-say="1"${stub}>🎙 Скажи</button>`);
+      parts.push(`<button class="btn mini" data-cmd="volume" data-val="+10"${stub} title="Громче">🔊+</button>`);
+      parts.push(`<button class="btn mini" data-cmd="volume" data-val="-10"${stub} title="Тише">🔊−</button>`);
+    }
+    return parts.join('');
+  }
+
   function renderDev() {
     const box = $('sm-dev');
     if (!box) return;
@@ -186,7 +213,6 @@
       return;
     }
     html += devs.map(d => {
-      const stub = d.stub ? ` disabled title="${esc(d.stub)}"` : '';
       const on = typeof (d.state || {}).on === 'boolean' ? d.state.on : null;
       return `<div class="sm-card${on === true ? ' on' : ''}${d.online === false ? ' off' : ''}" data-id="${d.id}">
         <div class="sm-ic">${kindIcon(d.kind)}</div>
@@ -197,20 +223,24 @@
           </div>
           <div class="sm-sub">${esc(stateText(d))}${d.stateAt ? ' · ' + fmtTime(d.stateAt) : ''}${d.online === false ? ' · 🔴 офлайн' : ''}${d.notes ? ' · ' + esc(d.notes) : ''}</div>
           <div class="sm-acts">
-            <button class="btn mini" data-cmd="on"${stub}>Вкл</button>
-            <button class="btn mini" data-cmd="off"${stub}>Выкл</button>
-            <button class="btn mini" data-cmd="toggle"${stub}>⇄</button>
+            ${kindBtns(d)}
             <button class="btn mini link" data-act="edit" title="Изменить">✎</button>
             <button class="btn mini link" data-act="del" title="Удалить">🗑</button>
           </div>
         </div>
         <span class="sm-dot" title="${d.online === false ? 'офлайн' : 'на связи'}"></span>
       </div>`;
-    }).join('') + html;
+    }).join('');
     box.innerHTML = html;
     box.querySelectorAll('.sm-card').forEach(card => {
       const id = card.getAttribute('data-id');
-      card.querySelectorAll('[data-cmd]').forEach(b => b.onclick = () => cmd(id, b.getAttribute('data-cmd')));
+      card.querySelectorAll('[data-cmd]').forEach(b => b.onclick = () => {
+        if (b.getAttribute('data-say') === '1') { toggleSay(card, id); return; }
+        let val;
+        const rv = b.getAttribute('data-val');
+        if (rv !== null && rv !== '') { try { val = JSON.parse(rv); } catch (e) { val = rv; } }
+        cmd(id, b.getAttribute('data-cmd'), val);
+      });
       card.querySelectorAll('[data-act]').forEach(b => b.onclick = async () => {
         const act = b.getAttribute('data-act');
         if (act === 'edit') openForm(id, null);
@@ -234,8 +264,12 @@
     return `<div class="sm-form" id="sm-form">
       <div class="sm-ftitle">${d ? '✎ Изменить устройство' : '＋ Новое устройство'}</div>
       <input class="sm-in" id="f-name" placeholder="Название (например, Лампа)" value="${v('name')}">
+      <div class="sm-ftitle sm-sub2">Это устройство…</div>
+      <div class="sm-kindrow" id="f-kindrow">
+        ${(data.kinds || []).map(k => `<button type="button" class="sm-kind-btn${((d ? d.kind : p.kind) || 'other') === k[0] ? ' active' : ''}" data-kind="${k[0]}" title="${esc(k[1])}">${kindIcon(k[0])}<span>${esc(k[1])}</span></button>`).join('')}
+      </div>
+      <input type="hidden" id="f-kind" value="${esc((d ? d.kind : p.kind) || 'other')}">
       <div class="sm-frow">
-        <select class="sm-in" id="f-kind">${(data.kinds || []).map(k => `<option value="${k[0]}"${(d ? d.kind : p.kind) === k[0] ? ' selected' : ''}>${k[1]}</option>`).join('')}</select>
         <select class="sm-in" id="f-adapter">${(data.adapters || []).map(a => `<option value="${a.id}"${adapter === a.id ? ' selected' : ''}>${esc(a.label)}${a.soon ? ' (' + a.soon + ')' : ''}</option>`).join('')}</select>
       </div>
       <div class="sm-frow">
@@ -254,6 +288,17 @@
 
   function wireDeviceForm() {
     $('f-cancel').onclick = () => { editId = null; prefill = null; render(); };
+    const kindRow = $('f-kindrow');
+    if (kindRow) {
+      const syncKind = () => {
+        const cur = $('f-kind').value;
+        kindRow.querySelectorAll('[data-kind]').forEach(x => x.classList.toggle('active', x.getAttribute('data-kind') === cur));
+      };
+      kindRow.querySelectorAll('[data-kind]').forEach(b => b.onclick = () => {
+        $('f-kind').value = b.getAttribute('data-kind');
+        syncKind();
+      });
+    }
     $('f-save').onclick = async () => {
       const pmeta = (prefill && prefill.meta && typeof prefill.meta === 'object') ? prefill.meta : {};
       const body = {
@@ -284,13 +329,37 @@
     if (n) n.focus();
   }
 
-  async function cmd(id, action) {
-    const r = await api('POST', '/api/smart/cmd', { id, action });
+  async function cmd(id, action, value) {
+    const r = await api('POST', '/api/smart/cmd', { id, action, value });
     if (r.status === 200) {
       scheduleRefresh();
     } else {
       toast('Умный дом', (r.d && r.d.error) || 'команда не выполнена', true);
     }
+  }
+
+  function toggleSay(card, id) {
+    const old = card.querySelector('[data-sayrow]');
+    if (old) { old.remove(); return; }
+    const acts = card.querySelector('.sm-acts');
+    if (!acts) return;
+    const row = document.createElement('div');
+    row.className = 'sm-sayrow';
+    row.dataset.sayrow = '1';
+    row.innerHTML = `<input class="sm-in" placeholder="Что сказать через Алису…" autocomplete="off">
+      <button class="btn mini">➤</button>`;
+    const inp = row.querySelector('input');
+    const send = () => {
+      const t = inp.value.trim();
+      if (!t) return;
+      row.remove();
+      cmd(id, 'say', t);
+    };
+    inp.addEventListener('keydown', e => { if (e.key === 'Enter') send(); });
+    row.querySelector('button').onclick = send;
+    acts.appendChild(row);
+    row.scrollIntoView({ block: 'nearest' });
+    inp.focus();
   }
 
   function renderHost() {

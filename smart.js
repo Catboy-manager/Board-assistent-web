@@ -679,9 +679,10 @@ module.exports = (deps) => {
       return yaAction(cd, 'volume', val, relative);
     }
     if (a === 'brightness') {
-      const val = Number(value);
+      let val = Number(value), relative = false;
+      if (typeof value === 'string' && /^[+-]/.test(value.trim())) { val = Number(value); relative = true; }
       if (!Number.isFinite(val)) return { error: 'нужно число для яркости' };
-      return yaAction(cd, 'brightness', val);
+      return yaAction(cd, 'brightness', val, relative);
     }
     if (a === 'set' && value && typeof value === 'object') {
       let last = null;
@@ -1428,7 +1429,7 @@ module.exports = (deps) => {
     if (p === '/api/smart/device') {
       const r = addDevice(body);
       if (r.error) return json(res, 400, { error: r.error });
-      return json(res, 200, { ok: true, device: r.device });
+      return json(res, 200, { ok: true, merged: !!r.merged, device: r.device });
     }
 
     let m = p.match(/^\/api\/smart\/device\/([^/]+)\/(delete|update)$/);
