@@ -95,6 +95,60 @@ function saveDb() {
   fs.writeFileSync(DB_FILE, JSON.stringify(db, null, 2));
 }
 
+function publicDb() {
+  const d = Object.assign({}, db);
+  delete d._tombstones;
+  return d;
+}
+
+/* Слияние списков с «надгробиями»: id, удалённые в текущем состоянии,
+   не воскресают, если их пришлёт устаревший клиент (полная перезапись доски). */
+function mergeList(curArr, incArr, tomb) {
+  const cur = Array.isArray(curArr) ? curArr : [];
+  const inc = Array.isArray(incArr) ? incArr : [];
+  const incIds = new Set();
+  for (const x of inc) if (x && x.id) incIds.add(x.id);
+  for (const x of cur) if (x && x.id && !incIds.has(x.id)) tomb[x.id] = Date.now();
+  const out = new Map();
+  for (const x of cur) if (x && x.id) out.set(x.id, x);
+  for (const x of inc) {
+    if (!x || !x.id) continue;
+    if (tomb[x.id]) continue;
+    out.set(x.id, x);
+  }
+  for (const id of Object.keys(tomb)) out.delete(id);
+  return [...out.values()];
+}
+
+function pruneTombstones(T) {
+  const now = Date.now();
+  const MAX = 800, AGE = 30 * 24 * 3600 * 1000;
+  for (const list of ['cards', 'columns', 'events']) {
+    const m = T[list] || (T[list] = {});
+    for (const k of Object.keys(m)) if (now - m[k] > AGE) delete m[k];
+    const ks = Object.keys(m);
+    if (ks.length > MAX) { ks.sort((a, b) => m[a] - m[b]); for (let i = 0; i < ks.length - MAX; i++) delete m[ks[i]]; }
+  }
+}
+
+function mergeSave(incoming) {
+  const base = defaultDb();
+  const cur = db || base;
+  const T = (cur._tombstones && typeof cur._tombstones === 'object') ? cur._tombstones : { cards: {}, columns: {}, events: {} };
+  T.cards = T.cards || {}; T.columns = T.columns || {}; T.events = T.events || {};
+  const incBoard = (incoming && incoming.board) || {};
+  const curBoard = cur.board || {};
+  const cards = mergeList(curBoard.cards, incBoard.cards, T.cards);
+  const columns = mergeList(curBoard.columns, incBoard.columns, T.columns);
+  const events = mergeList(cur.events, incoming && incoming.events, T.events);
+  pruneTombstones(T);
+  const out = Object.assign(base, incoming || {});
+  out.board = Object.assign({}, curBoard, incBoard, { cards, columns });
+  out.events = events;
+  out._tombstones = T;
+  return out;
+}
+
 function saveConfig() {
   fs.writeFileSync(CONFIG_FILE, JSON.stringify(config, null, 2));
 }
@@ -1010,12 +1064,12 @@ async function handleRequest(req, res) {
       if (p.startsWith('/api/assist/')) {
         if (await assist.handle(p, url, req, res, { json, readBody })) return;
       }
-      if (req.method === 'GET' && p === '/api/data') return json(res, 200, db);
+      if (req.method === 'GET' && p === '/api/data') return json(res, 200, publicDb());
       if (p === '/api/data' && (req.method === 'PUT' || req.method === 'POST')) {
         const body = JSON.parse((await readBody(req)).toString() || '{}');
-        db = Object.assign(defaultDb(), body);
+        db = mergeSave(body);
         saveDb();
-        return json(res, 200, { ok: true, db });
+        return json(res, 200, { ok: true, db: publicDb() });
       }
       if (req.method === 'GET' && p === '/api/weather') return await weatherHandler(res);
       if (p === '/api/upload' && req.method === 'POST') return await uploadHandler(req, res, JSON.parse((await readBody(req)).toString() || '{}'));

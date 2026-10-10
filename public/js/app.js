@@ -46,7 +46,15 @@ window.APP = {
     return { board: { columns: [{ id: 'c1', title: 'Задачи', color: '#f5b7b1' }, { id: 'c2', title: 'В работе', color: '#aed6f1' }, { id: 'c3', title: 'Готово', color: '#a9dfbf' }], cards: [] }, events: [], settings: { background: { type: 'color', value: '#1e2a3a' } } };
   },
   async save() {
-    try { await fetch('/api/data', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(this.db) }); } catch (e) { console.error('save fail', e); }
+    try {
+      const res = await fetch('/api/data', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(this.db) });
+      const r = await res.json().catch(() => null);
+      if (r && r.db) {
+        this.db = r.db;
+        this.render();
+        this.updateEventsBadge();
+      }
+    } catch (e) { console.error('save fail', e); }
   },
 
   /* ---- Clock ---- */
