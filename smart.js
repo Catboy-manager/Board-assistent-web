@@ -344,10 +344,10 @@ module.exports = (deps) => {
 
   function authSnap() {
     if (!yaAuth) return { state: yandexToken() ? 'ready' : 'none' };
-    if (yaTokenCache) return { state: 'ready' };
+    if (yaAuth.state === 'denied') return { state: 'denied' };
     const left = Math.max(0, Math.round((yaAuth.ts + yaAuth.expires_in * 1000 - Date.now()) / 1000));
     if (left <= 0 || yaAuth.state === 'expired') return { state: 'expired' };
-    return { state: yaAuth.state, user_code: yaAuth.user_code, url: yaAuth.verification_url, left, interval: Math.round((yaAuth.delay || 5000) / 1000) };
+    return { state: 'pending', user_code: yaAuth.user_code, url: yaAuth.verification_url, left, interval: Math.round((yaAuth.delay || 5000) / 1000) };
   }
 
   function scheduleYaTick(ms) {

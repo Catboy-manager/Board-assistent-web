@@ -541,7 +541,7 @@
     if (!box) return;
     const a = (data && data.auth) || { state: data && data.yandex ? 'ready' : 'none' };
     let html = '';
-    if (a.state === 'ready' || (data && data.yandex)) {
+    if (a.state === 'ready') {
       html = `<div class="sm-ya-ready">✅ Алиса подключена <button class="btn mini link" id="sm-ya-del">отозвать токен</button></div>`;
     } else if (a.state === 'pending') {
       const qr = 'https://api.qrserver.com/v1/create-qr-code/?size=240x240&qzone=1&data=' + encodeURIComponent(a.url + '?code=' + a.user_code);
@@ -604,7 +604,7 @@
   async function yaStart() {
     stopYaPoll();
     const r = await api('POST', '/api/smart/auth', { action: 'start' });
-    if (r.status === 200 && r.d && r.d.auth) { data.auth = r.d.auth; renderYa(); }
+    if (r.status === 200 && r.d && r.d.auth) { data.auth = r.d.auth; if (r.d.auth.state !== 'ready') data.yandex = false; renderYa(); }
     else toast('Умный дом', (r.d && r.d.error) || 'не удалось начать вход', true);
   }
 
