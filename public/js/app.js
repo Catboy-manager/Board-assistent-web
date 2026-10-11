@@ -385,7 +385,7 @@ window.APP = {
         <button class="btn primary" data-save-col>Сохранить</button>
       </div>
     `);
-    document.querySelector('[data-del-col]').onclick = () => { this.db.board.cards = this.db.board.cards.filter(c => c.columnId !== col.id); this.db.board.columns = this.db.board.columns.filter(c => c.id !== col.id); this.save(); this.render(); this.closeModal(); };
+    document.querySelector('[data-del-col]').onclick = () => { (this.db._deleted = this.db._deleted || { cards: [], columns: [], events: [] }); this.db._deleted.columns.push(col.id); for (const c of this.db.board.cards) if (c.columnId === col.id) this.db._deleted.cards.push(c.id); this.db.board.cards = this.db.board.cards.filter(c => c.columnId !== col.id); this.db.board.columns = this.db.board.columns.filter(c => c.id !== col.id); this.save(); this.render(); this.closeModal(); };
     document.querySelector('[data-save-col]').onclick = () => { col.title = document.getElementById('m-col-title').value.trim() || col.title; col.color = document.getElementById('m-col-color').value; this.save(); this.render(); this.closeModal(); };
   },
 
@@ -421,7 +421,7 @@ window.APP = {
         <button class="btn primary" data-save-card>${isNew ? 'Создать' : 'Сохранить'}</button>
       </div>
     `);
-    if (!isNew) document.querySelector('[data-del-card]').onclick = () => { this.db.board.cards = this.db.board.cards.filter(c => c.id !== card.id); this.save(); this.render(); this.closeModal(); };
+    if (!isNew) document.querySelector('[data-del-card]').onclick = () => { (this.db._deleted = this.db._deleted || { cards: [], columns: [], events: [] }).cards.push(card.id); this.db.board.cards = this.db.board.cards.filter(c => c.id !== card.id); this.save(); this.render(); this.closeModal(); };
     document.querySelector('[data-save-card]').onclick = () => {
       const t = document.getElementById('m-card-title').value.trim();
       if (!t) return;
@@ -454,7 +454,7 @@ window.APP = {
       </div>`;
     }).join('');
     el.querySelectorAll('[data-ev-del]').forEach(b => {
-      b.onclick = () => { this.db.events = this.db.events.filter(e => e.id !== b.dataset.evDel); this.save(); this.renderEvents(); this.updateEventsBadge(); };
+      b.onclick = () => { (this.db._deleted = this.db._deleted || { cards: [], columns: [], events: [] }).events.push(b.dataset.evDel); this.db.events = this.db.events.filter(e => e.id !== b.dataset.evDel); this.save(); this.renderEvents(); this.updateEventsBadge(); };
     });
   },
   openAddEvent() {

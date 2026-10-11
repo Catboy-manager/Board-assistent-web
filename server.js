@@ -103,19 +103,21 @@ function publicDb() {
 
 /* Слияние списков с «надгробиями»: id, удалённые в текущем состоянии,
    не воскресают, если их пришлёт устаревший клиент (полная перезапись доски). */
-function mergeList(curArr, incArr, tomb) {
+function mergeList(curArr, incArr, tomb, deleted) {
   const cur = Array.isArray(curArr) ? curArr : [];
   const inc = Array.isArray(incArr) ? incArr : [];
-  const incIds = new Set();
-  for (const x of inc) if (x && x.id) incIds.add(x.id);
-  for (const x of cur) if (x && x.id && !incIds.has(x.id)) tomb[x.id] = Date.now();
+  const dels = deleted instanceof Set ? deleted : new Set();
   const out = new Map();
   for (const x of cur) if (x && x.id) out.set(x.id, x);
+  const incIds = new Set();
   for (const x of inc) {
     if (!x || !x.id) continue;
-    if (tomb[x.id]) continue;
+    incIds.add(x.id);
     out.set(x.id, x);
   }
+  for (const id of incIds) dels.delete(id);
+  const now = Date.now();
+  for (const id of dels) { tomb[id] = now; out.delete(id); }
   for (const id of Object.keys(tomb)) out.delete(id);
   return [...out.values()];
 }
@@ -138,11 +140,13 @@ function mergeSave(incoming) {
   T.cards = T.cards || {}; T.columns = T.columns || {}; T.events = T.events || {};
   const incBoard = (incoming && incoming.board) || {};
   const curBoard = cur.board || {};
-  const cards = mergeList(curBoard.cards, incBoard.cards, T.cards);
-  const columns = mergeList(curBoard.columns, incBoard.columns, T.columns);
-  const events = mergeList(cur.events, incoming && incoming.events, T.events);
+  const del = (incoming && incoming._deleted && typeof incoming._deleted === 'object') ? incoming._deleted : {};
+  const cards = mergeList(curBoard.cards, incBoard.cards, T.cards, new Set(del.cards));
+  const columns = mergeList(curBoard.columns, incBoard.columns, T.columns, new Set(del.columns));
+  const events = mergeList(cur.events, incoming && incoming.events, T.events, new Set(del.events));
   pruneTombstones(T);
   const out = Object.assign(base, incoming || {});
+  delete out._deleted;
   out.board = Object.assign({}, curBoard, incBoard, { cards, columns });
   out.events = events;
   out._tombstones = T;
@@ -151,6 +155,11 @@ function mergeSave(incoming) {
     out.settings = Object.assign({}, incSettings);
     for (const k of Object.keys(cur.settings)) {
       if (!(k in incSettings)) out.settings[k] = cur.settings[k];
+    }
+    if (cur.settings.background && cur.settings.background.type === 'image') {
+      const nb = out.settings.background;
+      const defCol = !nb || nb.type !== 'image';
+      if (defCol) out.settings.background = Object.assign({}, cur.settings.background);
     }
   }
   return out;
