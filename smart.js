@@ -5,6 +5,7 @@ module.exports = (deps) => {
   const fs = require('fs');
   const path = require('path');
   const net = require('net');
+  const tls = require('tls');
   const os = require('os');
   const http = require('http');
   const https = require('https');
@@ -65,6 +66,10 @@ module.exports = (deps) => {
   const PASSPORT_CLIENT_SECRET = 'ad0a908f0aa341a182a37ecd75bc319e';
   const DEVICE_CODE_URL = 'https://oauth.yandex.ru/device/code';
   const OAUTH_TOKEN_URL = 'https://oauth.yandex.ru/token';
+  /* публичный клиент «Яндекс Музыки» — нужен для обмена x_token на music-токен (доступ к glagol) */
+  const MUSIC_CLIENT_ID = '23cabbbdc6cd418abb4b39c32c41195d';
+  const MUSIC_CLIENT_SECRET = '53bc75238f0c4d08a118e51fe9203300';
+  const YA_UA = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36';
 
   function defaults() {
     return { devices: [], scenes: [], poll: { enabled: false, interval: 5000 }, hosts: [], scanAt: 0 };
@@ -258,6 +263,8 @@ module.exports = (deps) => {
 
   let yaDevices = null;
   let yaTokenCache = null;
+  let yaMusicCache = null;
+  let yaSession = null; // { cookies, ts }
 
   function yandexToken() {
     if (yaTokenCache !== null) return yaTokenCache;
@@ -269,6 +276,9 @@ module.exports = (deps) => {
 
   function setYandexToken(token) {
     yaTokenCache = String(token || '').trim();
+    yaMusicCache = null;
+    yaSession = null;
+    yaDevices = null;
     try {
       if (yaTokenCache) fs.writeFileSync(TOKEN_FILE, yaTokenCache, { mode: 0o600 });
       else { try { fs.unlinkSync(TOKEN_FILE); } catch (e) {} }
@@ -305,6 +315,90 @@ module.exports = (deps) => {
       req.write(payload);
       req.end();
     });
+  }
+
+  /* --- получение music-токена (нужен для quasar.yandex.net/glagol/token) --- */
+  async function yaMusicToken() {
+    if (yaMusicCache) return yaMusicCache;
+    const x = yandexToken();
+    if (!x) return '';
+    try {
+      const r = await postForm('https://oauth.mobile.yandex.net/1/token', {
+        client_secret: MUSIC_CLIENT_SECRET, client_id: MUSIC_CLIENT_ID,
+        grant_type: 'x-token', access_token: x
+      });
+      if (r.json && r.json.access_token) return (yaMusicCache = r.json.access_token);
+    } catch (e) {}
+    return '';
+  }
+
+  /* --- cookie-сессия паспорта из x_token (для iot.quasar.yandex.ru) --- */
+  function rawRequest(method, urlStr, bodyBuf, hdr, timeout) {
+    return new Promise((resolve, reject) => {
+      let u;
+      try { u = new URL(urlStr); } catch (e) { return reject(new Error('некорректный URL: ' + urlStr)); }
+      const mod = u.protocol === 'https:' ? https : http;
+      const req = mod.request({
+        hostname: u.hostname, port: u.port || (u.protocol === 'https:' ? 443 : 80),
+        path: u.pathname + u.search, method, timeout: timeout || 9000, rejectUnauthorized: false,
+        headers: Object.assign({ 'User-Agent': YA_UA }, hdr || {})
+      }, (r) => {
+        let data = '';
+        r.on('data', d => { if (data.length < 40000) data += d.toString('utf8'); });
+        r.on('end', () => {
+          let json = null; try { json = JSON.parse(data); } catch (e) {}
+          resolve({ status: r.statusCode, headers: r.headers, text: data.slice(0, 4000), json });
+        });
+        r.on('error', reject);
+      });
+      req.on('timeout', () => req.destroy(new Error('timeout')));
+      req.on('error', reject);
+      if (bodyBuf) req.write(bodyBuf);
+      req.end();
+    });
+  }
+
+  async function yaSessionLogin() {
+    const x = yandexToken();
+    if (!x) return null;
+    const jar = {};
+    const absorb = (h) => {
+      let sc = h && h['set-cookie'];
+      if (!sc) return;
+      if (!Array.isArray(sc)) sc = [sc];
+      for (const c of sc) { const kv = c.split(';')[0]; const i = kv.indexOf('='); if (i > 0) jar[kv.slice(0, i).trim()] = kv.slice(i + 1).trim(); }
+    };
+    const cookieStr = () => Object.entries(jar).map(([k, v]) => k + '=' + v).join('; ');
+    try {
+      let r = await rawRequest('POST', 'https://mobileproxy.passport.yandex.net/1/bundle/auth/x_token/',
+        Buffer.from('type=x-token&retpath=' + encodeURIComponent('https://www.yandex.ru')),
+        { 'Content-Type': 'application/x-www-form-urlencoded', 'Ya-Consumer-Authorization': 'OAuth ' + x }, 10000);
+      absorb(r.headers);
+      if (!r.json || !r.json.track_id) return null;
+      const host = r.json.passport_host || 'https://passport.yandex.ru';
+      let url = host + '/auth/session/?track_id=' + encodeURIComponent(r.json.track_id);
+      for (let i = 0; i < 6 && url; i++) {
+        r = await rawRequest('GET', url, undefined, { Cookie: cookieStr(), 'User-Agent': YA_UA, Accept: 'text/html' }, 10000);
+        absorb(r.headers);
+        const loc = r.headers && r.headers.location;
+        url = loc ? (loc.startsWith('http') ? loc : (loc.startsWith('/') ? host + loc : null)) : null;
+      }
+      const c = cookieStr();
+      return c || null;
+    } catch (e) { return null; }
+  }
+
+  async function yaSessionCookies(force) {
+    if (!force && yaSession && Date.now() - yaSession.ts < 600000) return yaSession.cookies;
+    const c = await yaSessionLogin();
+    yaSession = c ? { cookies: c, ts: Date.now() } : null;
+    return c ? c : null;
+  }
+
+  async function yaSessionReq(method, urlStr, body, timeout) {
+    const cookies = await yaSessionCookies(false);
+    if (!cookies) return { status: 0, json: null, text: '' };
+    return request(method, urlStr, body, timeout || 9000, { Cookie: cookies, 'User-Agent': YA_UA });
   }
 
   let yaAuth = null; // { device_code, user_code, verification_url, ts, expires_in, delay, state }
@@ -441,8 +535,13 @@ module.exports = (deps) => {
 
   async function yaRefreshDevices() {
     if (!yandexToken()) return null;
-    const r = await yaReq('GET', 'https://iot.quasar.yandex.ru/m/v3/user/devices', undefined, 9000);
-    if (r.status >= 400 || !r.json || r.json.status !== 'ok') return null;
+    let r = null;
+    for (let i = 0; i < 4; i++) {
+      r = await yaSessionReq('GET', 'https://iot.quasar.yandex.ru/m/v3/user/devices', undefined, 9000);
+      if (r.json && r.json.status === 'ok') break;
+      await yaSessionCookies(true); // обновить сессию и повторить (эндпоинт бывает флейки)
+    }
+    if (!r || r.status >= 400 || !r.json || r.json.status !== 'ok') return null;
     const list = [];
     for (const house of (r.json.households || [])) list.push(...((house.all) || []));
     const byCloud = new Map();
@@ -547,9 +646,12 @@ module.exports = (deps) => {
     open() {
       return new Promise((resolve, reject) => {
         const key = crypto.randomBytes(16).toString('base64');
-        const sock = (this.sock = net.createConnection({ host: this.host, port: this.port }));
+        const isIp = /^\d{1,3}(\.\d{1,3}){3}$/.test(this.host) || this.host.includes(':');
+        const sopts = { host: this.host, port: this.port, rejectUnauthorized: false };
+        if (!isIp) sopts.servername = this.host;
+        const sock = (this.sock = tls.connect(sopts));
         sock.setTimeout(this.timeout);
-        sock.on('connect', () => {
+        sock.on('secureConnect', () => {
           sock.write('GET / HTTP/1.1\r\n' +
             'Host: ' + this.host + ':' + this.port + '\r\n' +
             'Upgrade: websocket\r\nConnection: Upgrade\r\n' +
@@ -613,32 +715,55 @@ module.exports = (deps) => {
     const did = dev.meta && (dev.meta.deviceId || dev.meta.device_id);
     const platform = dev.meta && dev.meta.platform;
     if (!did || !platform) throw new Error('у устройства нет deviceId/platform');
+    const mt = await yaMusicToken();
+    if (!mt) throw new Error('не удалось получить music-токен');
     const u = new URL('https://quasar.yandex.net/glagol/token');
     u.searchParams.set('device_id', String(did));
     u.searchParams.set('platform', String(platform));
-    const r = await yaReq('GET', u.toString(), undefined, 6000);
+    const r = await request('GET', u.toString(), undefined, 6000, { Authorization: 'OAuth ' + mt });
     if (r.status !== 200 || !r.json || r.json.status !== 'ok') throw new Error('token: HTTP ' + r.status);
     return r.json.token;
   }
 
-  async function glagolLocal(dev, payloadCmd) {
-    const host = dev.meta && dev.meta.host;
-    const port = Number(dev.meta && (dev.meta.port || 1961)) || 1961;
+  async function glagolSend(dev, payloadCmd) {
+    const meta = dev.meta || {};
+    const host = meta.host;
+    const port = Number(meta.port || 1961) || 1961;
     if (!host) throw new Error('у устройства не указан IP станции (meta.host)');
-    const token = await glagolDeviceToken(dev).then(t => t).catch(e => { throw new Error(e.message); });
+    const token = await glagolDeviceToken(dev);
     const ws = new GlagolSocket(host, port, 6000);
     await ws.open();
     const mid = uid('w_');
     const reply = new Promise((resolve) => {
-      const t = setTimeout(() => resolve(null), 6000);
+      const t = setTimeout(() => resolve(null), 7000);
       ws.onmsg = (msg) => {
-        if (msg && (msg.requestId === mid || msg.status)) { clearTimeout(t); resolve(msg); }
+        if (msg && msg.requestId === mid) { clearTimeout(t); resolve(msg); }
       };
     });
     ws.send({ conversationToken: token, id: mid, payload: payloadCmd, sentTime: Date.now() });
     const out = await reply;
     ws.close();
     return out;
+  }
+
+  function glagolLocal(dev, payloadCmd) { return glagolSend(dev, payloadCmd); }
+
+  /* заставить станцию произнести фразу (TTS через локальный протокол) */
+  function glagolSay(dev, text) {
+    return glagolSend(dev, {
+      command: 'serverAction',
+      serverActionEventPayload: {
+        type: 'server_action',
+        name: 'update_form',
+        payload: {
+          form_update: {
+            name: 'personal_assistant.scenarios.quasar.iot.repeat_phrase',
+            slots: [{ type: 'string', name: 'phrase_to_repeat', value: String(text) }]
+          },
+          resubmit: true
+        }
+      }
+    });
   }
 
   async function glagolPoll(dev) {
@@ -649,16 +774,26 @@ module.exports = (deps) => {
   async function glagolCmd(dev, action, value) {
     const a = String(action || '').toLowerCase();
     if (!yandexToken()) return yaNeeded();
+    const meta = dev.meta || {};
+    const text = String(value == null ? '' : value);
+    const canLocal = !!(meta.host && (meta.deviceId || meta.device_id) && meta.platform);
     if (a === 'say' || a === 'tts') {
-      return Object.assign({ ok: true }, await yaSpeak(dev, value, true));
+      if (!text.trim()) return { error: 'пустой текст' };
+      if (canLocal) {
+        try {
+          const r = await glagolSay(dev, text);
+          if (r && r.status === 'SUCCESS') return { ok: true, text: 'станция произнесла фразу' };
+          if (r && r.status) return { error: 'станция ответила: ' + r.status };
+        } catch (e) { /* падаем в облако */ }
+      }
+      return Object.assign({ ok: true }, await yaSpeak(dev, text, true));
     }
     if (a === 'command' || a === 'alice') {
-      const text = String(value == null ? '' : value);
       if (!text.trim()) return { error: 'пустой текст команды' };
-      if (dev.meta && dev.meta.host) {
+      if (canLocal) {
         try {
           const r = await glagolLocal(dev, { command: 'sendText', text });
-          return { ok: !!r, text: 'отправлено на станцию' };
+          if (r && r.status === 'SUCCESS') return { ok: true, text: 'отправлено на станцию' };
         } catch (e) { /* падаем в облако */ }
       }
       const r = await yaSpeak(dev, text, false);
@@ -1112,7 +1247,7 @@ module.exports = (deps) => {
     if (quasar || alice1337) {
       let meta = {};
       if (quasar) {
-        meta = { deviceId: host.deviceId || '', platform: host.platform || '' };
+        meta = { deviceId: host.deviceId || '', platform: host.platform || '', host: host.ip };
         if (mports[0] || ports.includes(1961)) meta.port = mports[0] || 1961;
       }
       out.push({
