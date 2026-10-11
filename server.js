@@ -146,6 +146,13 @@ function mergeSave(incoming) {
   out.board = Object.assign({}, curBoard, incBoard, { cards, columns });
   out.events = events;
   out._tombstones = T;
+  if (cur && cur.settings) {
+    const incSettings = (incoming && incoming.settings && typeof incoming.settings === 'object') ? incoming.settings : {};
+    out.settings = Object.assign({}, incSettings);
+    for (const k of Object.keys(cur.settings)) {
+      if (!(k in incSettings)) out.settings[k] = cur.settings[k];
+    }
+  }
   return out;
 }
 

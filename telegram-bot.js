@@ -146,7 +146,7 @@ async function loop(opts) {
     } catch (e) {
       fails++;
       if (fails === 1) opts.log('Telegram недоступен: ' + (e && e.message) + ' (для RU-сетей укажите HTTPS_PROXY или TELEGRAM_API_BASE)');
-      else if (fails % 5 === 0) opts.log('Telegram всё ещё недоступен (' + fails + ' попыток)');
+      else if (fails % 5 === 0 && fails < 120) opts.log('Telegram всё ещё недоступен (' + fails + ' попыток)');
     }
     await new Promise(r => setTimeout(r, 4000));
   }

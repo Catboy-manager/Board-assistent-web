@@ -21,7 +21,9 @@
     const k = key();
     if (k) headers['x-smart-key'] = k;
     if (body !== undefined) headers['Content-Type'] = 'application/json';
-    const r = await fetch(p, { method, headers, body: body !== undefined ? JSON.stringify(body) : undefined });
+    let r;
+    try { r = await fetch(p, { method, headers, body: body !== undefined ? JSON.stringify(body) : undefined }); }
+    catch (e) { return { status: 0, d: { error: 'нет связи с сервером' } }; }
     let d = null;
     try { d = await r.json(); } catch (e) {}
     if (r.status === 401 || r.status === 403) {
@@ -42,6 +44,7 @@
     if (typeof s.on === 'boolean') {
       const extra = [];
       if (typeof s.brightness === 'number') extra.push(s.brightness + '%');
+      if (typeof s.volume === 'number') extra.push('🔊 ' + s.volume + '%');
       if (typeof s.temperature === 'number') extra.push(s.temperature + '°');
       if (typeof s.power === 'number') extra.push(s.power + ' Вт');
       return (s.on ? 'вкл' : 'выкл') + (extra.length ? ' · ' + extra.join(' · ') : '');

@@ -147,6 +147,7 @@ module.exports = (deps) => {
     if (typeof s.on === 'boolean') {
       const extra = [];
       if (typeof s.brightness === 'number') extra.push(s.brightness + '%');
+      if (typeof s.volume === 'number') extra.push('🔊 ' + s.volume + '%');
       if (typeof s.temperature === 'number') extra.push(s.temperature + '°');
       if (typeof s.power === 'number') extra.push(s.power + ' Вт');
       return (s.on ? 'вкл' : 'выкл') + (extra.length ? ' · ' + extra.join(' · ') : '');
@@ -642,7 +643,7 @@ module.exports = (deps) => {
   }
 
   class GlagolSocket {
-    constructor(host, port, timeout) { this.host = host; this.port = port; this.timeout = timeout || 6000; this.buf = Buffer.alloc(0); }
+    constructor(host, port, timeout) { this.host = host; this.port = port; this.timeout = timeout || 7000; this.buf = Buffer.alloc(0); this.waiters = new Map(); this.vol = null; this.state = null; this.dead = false; this.handshaked = false; this.sock = null; }
     open() {
       return new Promise((resolve, reject) => {
         const key = crypto.randomBytes(16).toString('base64');
@@ -650,7 +651,10 @@ module.exports = (deps) => {
         const sopts = { host: this.host, port: this.port, rejectUnauthorized: false };
         if (!isIp) sopts.servername = this.host;
         const sock = (this.sock = tls.connect(sopts));
-        sock.setTimeout(this.timeout);
+        sock.setTimeout(this.timeout * 2);
+        sock.on('error', () => { this.dead = true; reject(new Error('tls error')); });
+        sock.on('close', () => { this.dead = true; for (const w of this.waiters.values()) clearTimeout(w.t); this.waiters.clear(); });
+        sock.on('timeout', () => { try { sock.destroy(); } catch (e) {} });
         sock.on('secureConnect', () => {
           sock.write('GET / HTTP/1.1\r\n' +
             'Host: ' + this.host + ':' + this.port + '\r\n' +
@@ -666,18 +670,16 @@ module.exports = (deps) => {
             const i = this.buf.indexOf('\r\n\r\n');
             if (i < 0) return;
             const head = this.buf.slice(0, i).toString('latin1');
-            if (!/^HTTP\/1\.1 101/i.test(head)) return reject(new Error('WS: ' + head.split('\r\n')[0]));
+            if (!/^HTTP\/1\.1 101/i.test(head)) { this.dead = true; reject(new Error('WS: ' + head.split('\r\n')[0])); return; }
             this.buf = this.buf.slice(i + 4);
             this.handshaked = true;
-            this.queue = [];
             resolve(this);
           }
           this.frames();
         });
-        sock.on('error', reject);
-        sock.on('timeout', () => reject(new Error('ws timeout')));
       });
     }
+    alive() { return !!this.sock && !this.sock.destroyed && !this.dead; }
     frames() {
       let off = 0;
       while (true) {
@@ -690,12 +692,26 @@ module.exports = (deps) => {
         if (len < 0 || this.buf.length < p + len) break;
         const payload = this.buf.slice(p, p + len);
         off = p + len;
-        if (op === 1) { try { this.queue.push(JSON.parse(payload.toString('utf8'))); } catch (e) {} }
-        else if (op === 8) { try { this.sock.end(); } catch (e) {} return; }
+        if (op === 1) {
+          try {
+            const m = JSON.parse(payload.toString('utf8'));
+            if (m && m.state) {
+              this.state = m.state;
+              if (typeof m.state.volume === 'number') this.vol = m.state.volume;
+              else if (m.state.playerState && typeof m.state.playerState.volume === 'number') this.vol = m.state.playerState.volume;
+            }
+            if (m && m.requestId && this.waiters.has(m.requestId)) {
+              const w = this.waiters.get(m.requestId);
+              this.waiters.delete(m.requestId);
+              clearTimeout(w.t);
+              w.res(m);
+            }
+          } catch (e) {}
+        }
+        else if (op === 8) { try { this.sock.end(); } catch (e) {} this.dead = true; return; }
         else if (op === 9) { try { this.sendRaw(10, payload); } catch (e) {} }
       }
       this.buf = this.buf.slice(off);
-      if (this.queue.length) { const q = this.queue.splice(0); for (const m of q) { if (this.onmsg) { try { this.onmsg(m); } catch (e) {} } } }
     }
     sendRaw(op, payload) {
       const mask = crypto.randomBytes(4);
@@ -708,13 +724,34 @@ module.exports = (deps) => {
       this.sock.write(Buffer.concat([head, mask, masked]));
     }
     send(obj) { this.sendRaw(1, Buffer.from(JSON.stringify(obj))); }
-    close() { try { this.sendRaw(8, Buffer.alloc(0)); } catch (e) {} try { this.sock.destroy(); } catch (e) {} }
+    close() { this.dead = true; try { this.sendRaw(8, Buffer.alloc(0)); } catch (e) {} try { this.sock.destroy(); } catch (e) {} }
   }
 
+  const glagolConn = new Map();
+  const glagolTokenCache = { did: null, token: null, ts: 0 };
+  function glagolKey(dev) {
+    const m = dev.meta || {};
+    return String(m.deviceId || m.device_id || m.host || 'glagol');
+  }
+  async function glagolEnsure(dev) {
+    const m = dev.meta || {};
+    const host = m.host;
+    const port = Number(m.port || 1961) || 1961;
+    if (!host) throw new Error('у устройства не указан IP станции (meta.host)');
+    const key = glagolKey(dev);
+    let c = glagolConn.get(key);
+    if (c && c.alive()) return c;
+    if (c) { try { c.close(); } catch (e) {} glagolConn.delete(key); }
+    c = new GlagolSocket(host, port, 7000);
+    await c.open();
+    glagolConn.set(key, c);
+    return c;
+  }
   async function glagolDeviceToken(dev) {
     const did = dev.meta && (dev.meta.deviceId || dev.meta.device_id);
     const platform = dev.meta && dev.meta.platform;
     if (!did || !platform) throw new Error('у устройства нет deviceId/platform');
+    if (glagolTokenCache.did === did && glagolTokenCache.token && Date.now() - glagolTokenCache.ts < 1800000) return glagolTokenCache.token;
     const mt = await yaMusicToken();
     if (!mt) throw new Error('не удалось получить music-токен');
     const u = new URL('https://quasar.yandex.net/glagol/token');
@@ -722,31 +759,31 @@ module.exports = (deps) => {
     u.searchParams.set('platform', String(platform));
     const r = await request('GET', u.toString(), undefined, 6000, { Authorization: 'OAuth ' + mt });
     if (r.status !== 200 || !r.json || r.json.status !== 'ok') throw new Error('token: HTTP ' + r.status);
-    return r.json.token;
+    glagolTokenCache.did = did; glagolTokenCache.token = r.json.token; glagolTokenCache.ts = Date.now();
+    return glagolTokenCache.token;
   }
 
   async function glagolSend(dev, payloadCmd) {
-    const meta = dev.meta || {};
-    const host = meta.host;
-    const port = Number(meta.port || 1961) || 1961;
-    if (!host) throw new Error('у устройства не указан IP станции (meta.host)');
     const token = await glagolDeviceToken(dev);
-    const ws = new GlagolSocket(host, port, 6000);
-    await ws.open();
+    const c = await glagolEnsure(dev);
     const mid = uid('w_');
-    const reply = new Promise((resolve) => {
-      const t = setTimeout(() => resolve(null), 7000);
-      ws.onmsg = (msg) => {
-        if (msg && msg.requestId === mid) { clearTimeout(t); resolve(msg); }
-      };
+    const out = await new Promise((resolve) => {
+      const t = setTimeout(() => resolve({ timeout: true }), 8000);
+      c.waiters.set(mid, { res: (m) => { clearTimeout(t); resolve(m); }, t });
+      try { c.send({ conversationToken: token, id: mid, payload: payloadCmd, sentTime: Date.now() }); }
+      catch (e) { clearTimeout(t); c.waiters.delete(mid); resolve({ error: e.message }); }
     });
-    ws.send({ conversationToken: token, id: mid, payload: payloadCmd, sentTime: Date.now() });
-    const out = await reply;
-    ws.close();
+    if (out.timeout || out.error) { try { c.close(); } catch (e) {} glagolConn.delete(glagolKey(dev)); }
     return out;
   }
 
   function glagolLocal(dev, payloadCmd) { return glagolSend(dev, payloadCmd); }
+
+  async function glagolVolume(dev) {
+    const c = await glagolEnsure(dev);
+    for (let i = 0; i < 12 && typeof c.vol !== 'number'; i++) await new Promise(r => setTimeout(r, 100));
+    return typeof c.vol === 'number' ? c.vol : null;
+  }
 
   /* заставить станцию произнести фразу (TTS через локальный протокол) */
   function glagolSay(dev, text) {
@@ -768,7 +805,12 @@ module.exports = (deps) => {
 
   async function glagolPoll(dev) {
     if (!yandexToken()) return null;
-    try { const cd = await yaDeviceOf(dev); return cd ? yaStateOf(cd) : null; } catch (e) { return null; }
+    let st = null;
+    try { const cd = await yaDeviceOf(dev); if (cd) st = yaStateOf(cd); } catch (e) {}
+    if ((!st || st.volume === undefined) && dev.meta && dev.meta.host) {
+      try { const vol = await glagolVolume(dev); if (vol != null) st = Object.assign({}, st, { volume: Math.round(vol * 100) }); } catch (e) {}
+    }
+    return st;
   }
 
   /* минимальный protobuf-кодировщик (field: string) — для externalCommandBypass */
@@ -826,14 +868,27 @@ module.exports = (deps) => {
           if (lr && lr.status === 'SUCCESS') return { ok: true, state: { on: next } };
         } else if (a === 'volume') {
           const v = String(value == null ? '' : value).trim();
+          let resVol = null;
+          let cur = null;
+          try { cur = await glagolVolume(dev); } catch (e) {}
           if (/^[+-]/.test(v)) {
-            lr = await glagolLocal(dev, glagolExtCmd(v.startsWith('+') ? 'sound_louder' : 'sound_quiter'));
+            const delta = Number(v);
+            if (Number.isFinite(delta) && cur != null) {
+              const next = Math.max(0, Math.min(1, cur + delta / 100));
+              resVol = Math.round(next * 100);
+              lr = await glagolLocal(dev, { command: 'setVolume', volume: next });
+            } else {
+              lr = await glagolLocal(dev, glagolExtCmd(v.startsWith('+') ? 'sound_louder' : 'sound_quiter'));
+            }
           } else {
             const n = Number(v);
             if (!Number.isFinite(n) || n <= 0) return { error: 'нужно число для громкости' };
-            lr = await glagolLocal(dev, { command: 'setVolume', volume: Math.max(0, Math.min(1, n / 100)) });
+            resVol = Math.max(0, Math.min(100, Math.round(n)));
+            lr = await glagolLocal(dev, { command: 'setVolume', volume: Math.max(0, Math.min(1, resVol / 100)) });
           }
-          if (lr && lr.status === 'SUCCESS') return { ok: true };
+          if (lr && lr.status === 'SUCCESS') {
+            return { ok: true, state: resVol != null ? { volume: resVol } : {} };
+          }
           if (lr && lr.status) return { error: 'станция: ' + lr.status + (lr.errorCode ? ' ' + lr.errorCode : '') };
         }
       } catch (e) { /* падаем в облако */ }
