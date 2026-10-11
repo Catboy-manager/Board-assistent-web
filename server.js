@@ -1104,8 +1104,11 @@ async function handleRequest(req, res) {
     if (p === '/ca.pem') {
       const ca = path.join(ROOT, 'ssl', 'ca.pem');
       if (fs.existsSync(ca)) {
-        res.writeHead(200, { 'Content-Type': 'application/x-pem-file' });
-        return fs.createReadStream(ca).pipe(res);
+        const st = fs.statSync(ca);
+        res.writeHead(200, { 'Content-Type': 'application/x-pem-file', 'Content-Length': st.size });
+        const rs = fs.createReadStream(ca);
+        rs.on('error', () => { try { res.destroy(); } catch (e) {} });
+        return rs.pipe(res);
       }
       return json(res, 404, { error: 'no ca' });
     }
@@ -1113,8 +1116,11 @@ async function handleRequest(req, res) {
     if (p === '/setup') {
       const sp = path.join(PUBLIC_DIR, 'setup.html');
       if (fs.existsSync(sp)) {
-        res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-        return fs.createReadStream(sp).pipe(res);
+        const st = fs.statSync(sp);
+        res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Content-Length': st.size });
+        const rs = fs.createReadStream(sp);
+        rs.on('error', () => { try { res.destroy(); } catch (e) {} });
+        return rs.pipe(res);
       }
       return json(res, 404, { error: 'no setup page' });
     }
@@ -1123,21 +1129,39 @@ async function handleRequest(req, res) {
       const file = path.normalize(path.join(UPLOAD_DIR, path.basename(p)));
       if (!fs.existsSync(file)) { res.writeHead(404); return res.end('not found'); }
       const ext = path.extname(file).toLowerCase();
-      res.writeHead(200, { 'Content-Type': MIME[ext] || 'application/octet-stream', 'Cache-Control': 'public, max-age=86400' });
-      return fs.createReadStream(file).pipe(res);
+      const st = fs.statSync(file);
+      res.writeHead(200, { 'Content-Type': MIME[ext] || 'application/octet-stream', 'Content-Length': st.size, 'Cache-Control': 'public, max-age=86400' });
+      const rs = fs.createReadStream(file);
+      rs.on('error', () => { try { res.destroy(); } catch (e) {} });
+      return rs.pipe(res);
     }
 
     let file = p === '/' ? '/index.html' : p;
     const target = path.normalize(path.join(PUBLIC_DIR, file));
     if (!target.startsWith(PUBLIC_DIR)) { res.writeHead(403); return res.end('forbidden'); }
-    if (!fs.existsSync(target) || fs.statSync(target).isDirectory()) { res.writeHead(404); return res.end('not found'); }
+    let st;
+    try { st = fs.statSync(target); } catch (e) { st = null; }
+    if (!st || st.isDirectory()) { res.writeHead(404); return res.end('not found'); }
     const ext = path.extname(target).toLowerCase();
     const isDoc = ['.html', '.htm', '.js', '.css', '.json', '.mjs'].includes(ext);
-    res.writeHead(200, {
+    const etag = '"' + st.size + '-' + Math.floor(st.mtimeMs / 1000) + '"';
+    const inm = Array.isArray(req.headers['if-none-match']) ? req.headers['if-none-match'][0] : req.headers['if-none-match'];
+    if (inm === etag) {
+      res.writeHead(304, { 'ETag': etag, 'Cache-Control': ext === '.html' || ext === '.htm' ? 'no-store' : 'no-cache' });
+      return res.end();
+    }
+    const headers = {
       'Content-Type': MIME[ext] || 'application/octet-stream',
-      'Cache-Control': isDoc ? 'no-store' : 'public, max-age=86400'
-    });
-    fs.createReadStream(target).pipe(res);
+      'Content-Length': st.size,
+      'ETag': etag
+    };
+    if (ext === '.html' || ext === '.htm') headers['Cache-Control'] = 'no-store';
+    else if (isDoc) headers['Cache-Control'] = 'no-cache';
+    else headers['Cache-Control'] = 'public, max-age=86400';
+    res.writeHead(200, headers);
+    const rs = fs.createReadStream(target);
+    rs.on('error', () => { try { res.destroy(); } catch (e) {} });
+    rs.pipe(res);
   } catch (err) {
     serverError(res, err, 'router');
   }
