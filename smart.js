@@ -771,6 +771,22 @@ module.exports = (deps) => {
     try { const cd = await yaDeviceOf(dev); return cd ? yaStateOf(cd) : null; } catch (e) { return null; }
   }
 
+  /* минимальный protobuf-кодировщик (field: string) — для externalCommandBypass */
+  function glagolProtobuf(msg) {
+    const b = [];
+    const vi = (i) => { while (i >= 0x80) { b.push(0x80 | (i & 0x7f)); i >>>= 7; } b.push(i); };
+    for (const key of Object.keys(msg || {})) {
+      const v = String(msg[key]);
+      b.push((Number(key) << 3) | 2);
+      vi(Buffer.byteLength(v, 'utf8'));
+      for (const byte of Buffer.from(v, 'utf8')) b.push(byte);
+    }
+    return Buffer.from(b);
+  }
+  function glagolExtCmd(name) {
+    return { command: 'externalCommandBypass', data: glagolProtobuf({ 1: name }).toString('base64') };
+  }
+
   async function glagolCmd(dev, action, value) {
     const a = String(action || '').toLowerCase();
     if (!yandexToken()) return yaNeeded();
@@ -799,6 +815,28 @@ module.exports = (deps) => {
       const r = await yaSpeak(dev, text, false);
       if (r.error) return r;
       return { ok: true };
+    }
+    if (canLocal && (a === 'on' || a === 'off' || a === 'toggle' || a === 'volume')) {
+      try {
+        let lr = null;
+        if (a === 'on' || a === 'off' || a === 'toggle') {
+          const cur = dev.state && typeof dev.state.on === 'boolean' ? dev.state.on : true;
+          const next = a === 'on' ? true : a === 'off' ? false : !cur;
+          lr = await glagolLocal(dev, { command: next ? 'play' : 'stop' });
+          if (lr && lr.status === 'SUCCESS') return { ok: true, state: { on: next } };
+        } else if (a === 'volume') {
+          const v = String(value == null ? '' : value).trim();
+          if (/^[+-]/.test(v)) {
+            lr = await glagolLocal(dev, glagolExtCmd(v.startsWith('+') ? 'sound_louder' : 'sound_quiter'));
+          } else {
+            const n = Number(v);
+            if (!Number.isFinite(n) || n <= 0) return { error: 'нужно число для громкости' };
+            lr = await glagolLocal(dev, { command: 'setVolume', volume: Math.max(0, Math.min(1, n / 100)) });
+          }
+          if (lr && lr.status === 'SUCCESS') return { ok: true };
+          if (lr && lr.status) return { error: 'станция: ' + lr.status + (lr.errorCode ? ' ' + lr.errorCode : '') };
+        }
+      } catch (e) { /* падаем в облако */ }
     }
     const cd = await yaDeviceOf(dev, true);
     if (!cd) return { error: 'устройство не найдено у Яндекса (укажите deviceId в meta)', code: 404 };
