@@ -7,6 +7,7 @@ window.APP = {
   async init() {
     this.db = await this.fetchData();
     this.render();
+    if (window.PLACE) try { window.PLACE.reload(); } catch (e) {}
     this.initClock();
     this.applyBg();
     this.initDragTouch();

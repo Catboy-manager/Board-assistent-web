@@ -87,7 +87,8 @@ function defaultDb() {
     events: [],
     settings: {
       background: { type: 'color', value: '#1e2a3a', blur: 0, darken: 0 }
-    }
+    },
+    layout: {}
   };
 }
 
@@ -161,6 +162,11 @@ function mergeSave(incoming) {
       const defCol = !nb || nb.type !== 'image';
       if (defCol) out.settings.background = Object.assign({}, cur.settings.background);
     }
+  }
+  if (cur.layout && typeof cur.layout === 'object') {
+    const incLayout = (incoming && incoming.layout && typeof incoming.layout === 'object') ? incoming.layout : null;
+    if (!incLayout) out.layout = Object.assign({}, cur.layout);
+    else out.layout = Object.assign({}, incLayout);
   }
   return out;
 }

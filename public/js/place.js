@@ -138,15 +138,42 @@
 
   function loadState() {
     try {
-      const d = JSON.parse(localStorage.getItem(STORE) || '{}');
-      if (d && typeof d === 'object') layout = d;
-    } catch (e) {}
+      const server = {};
+      const A = window.APP && window.APP.db;
+      if (A && A.layout && typeof A.layout === 'object') {
+        for (const k of Object.keys(A.layout)) {
+          const v = A.layout[k];
+          if (v && typeof v === 'object') server[k] = v;
+        }
+      }
+      const ls = {};
+      try {
+        const d = JSON.parse(localStorage.getItem(STORE) || '{}');
+        if (d && typeof d === 'object') Object.assign(ls, d);
+      } catch (e) {}
+      layout = {};
+      for (const k of Object.keys(server)) layout[k] = server[k];
+      for (const k of Object.keys(ls)) if (layout[k] === undefined) layout[k] = ls[k];
+    } catch (e) { layout = {}; }
   }
   function save() {
     try {
       if (active) localStorage.setItem(STORE, JSON.stringify(layout));
       else localStorage.removeItem(STORE);
     } catch (e) {}
+    pushServer();
+  }
+  function pushServer() {
+    clearTimeout(pushServer.t);
+    pushServer.t = setTimeout(() => {
+      try {
+        const A = window.APP;
+        if (!A || !A.db) return;
+        A.db.layout = {};
+        for (const k of Object.keys(layout)) A.db.layout[k] = Object.assign({}, layout[k]);
+        fetch('/api/data', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(A.db) }).catch(() => {});
+      } catch (e) {}
+    }, 300);
   }
 
   function boardBox() {
@@ -548,6 +575,28 @@
     document.addEventListener('pointerup', up);
   }
 
+  function resetTiles() {
+    document.querySelectorAll('.bp-tile').forEach(t => {
+      const id = t.getAttribute('data-tile');
+      const p = t.querySelector('.bp-body > *');
+      const panel = panelOf(id) && $(panelOf(id));
+      if (p && panel) {
+        if (p.classList.contains('sp-pane')) p.classList.remove('active');
+        else p.classList.remove('hidden');
+        panel.appendChild(p);
+      }
+      t.remove();
+    });
+    layout = {};
+    active = false;
+  }
+
+  function reload() {
+    resetTiles();
+    restore();
+    if (!Object.keys(layout).length) pushServer();
+  }
+
   /* ---------- Drop из каталога ---------- */
   function wireDrop() {
     const ov = $('board-panels');
@@ -661,6 +710,9 @@
       if (active) return;
       if (prevMinim) prevMinim();
     };
+
+    window.PLACE = window.PLACE || {};
+    window.PLACE.reload = reload;
 
     restore();
   }
