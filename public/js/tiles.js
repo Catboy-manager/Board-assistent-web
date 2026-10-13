@@ -94,7 +94,7 @@
     });
     const grip = tile.querySelector('.sw-tile-grip');
     if (grip) {
-      grip.addEventListener('mousedown', resizeStart(tile, tile.getAttribute('data-tile')));
+      grip.addEventListener('mousedown', e => { e.preventDefault(); resizeStart(tile, tile.getAttribute('data-tile'))(e); });
       grip.addEventListener('touchstart', e => { e.preventDefault(); resizeStart(tile, tile.getAttribute('data-tile'))(e.touches[0]); }, { passive: false });
     }
   }

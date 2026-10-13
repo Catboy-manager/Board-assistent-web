@@ -967,7 +967,9 @@ label { display: block; font-size: 13px; color: var(--muted); margin: 12px 0 5px
 .palette.open { display: flex; }
 .pl-head { display: flex; align-items: center; }
 .pl-head h3 { font-size: 13px; margin: 0; flex: 1; }
-.pl-close { min-width: 26px; height: 26px; padding: 0 4px; }
+.pl-tidy, .pl-close { min-width: 26px; height: 26px; padding: 0 4px; }
+.pl-tools { display: flex; }
+.pl-tidy-all { flex: 1; font-size: 12px; padding: 5px 8px; }
 .pl-hint { font-size: 10.5px; color: var(--muted); line-height: 1.35; }
 .pl-list { display: flex; flex-direction: column; gap: 4px; }
 .pl-item {

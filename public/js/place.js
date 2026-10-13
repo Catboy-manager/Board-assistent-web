@@ -94,6 +94,41 @@
     return { x, y };
   }
 
+  function visibleRect() {
+    const C = window.CANVAS;
+    const v = (C && C.visible) ? C.visible() : { left: 12, top: 72, width: 2000, height: 1200 };
+    const minTop = (C && C.safeTop) ? C.safeTop() : 0;
+    return {
+      left: Math.max(0, v.left || 12),
+      top: Math.max(v.top || 72, minTop),
+      width: Math.max(400, v.width || 2000),
+      height: Math.max(400, v.height || 1200)
+    };
+  }
+
+  /* Свободное место В видимой области доски: столбцы сверху вниз, слева направо,
+     никогда не уводя панель за нижний/правый край видимой части. */
+  function flowScan(id, w, h) {
+    const v = visibleRect();
+    const maxRight = Math.min(Math.max(400, safeRightX()), CANVAS_BOUND - w);
+    const x0 = snap(v.left + 24);
+    const y0 = snap(v.top + 10);
+    let guard = 0;
+    for (let col = 0; col < 36 && guard < 900; col++) {
+      const cx = snap(x0 + col * (w + 16));
+      if (cx + w > maxRight) break;
+      for (let row = 0; guard < 900; row++) {
+        const cy = snap(y0 + row * (h + 10));
+        if (cy + h > v.top + v.height) break;
+        if (!collides(cx, cy, w, h, id)) return { x: cx, y: cy };
+        guard++;
+      }
+      guard++;
+    }
+    const f0 = freeSlot(x0, y0, w, h, id);
+    return { x: f0.x, y: f0.y };
+  }
+
   function mutualSnap(x, y, w, h, id) {
     const SENS = 24;
     let bx = null, by = null, dxBest = SENS, dyBest = SENS;
@@ -176,12 +211,6 @@
     }, 300);
   }
 
-  function boardBox() {
-    const C = window.CANVAS;
-    if (!C || !C.visible) return { left: 12, top: 72, width: 2000, height: 1200 };
-    return C.visible();
-  }
-
   function safeTopY() {
     const C = window.CANVAS;
     if (C && C.safeTop) return C.safeTop();
@@ -249,9 +278,11 @@
     pl.innerHTML = `
       <div class="pl-head">
         <h3>🧩 Панели</h3>
+        <button class="icon-btn pl-tidy" title="Разложить все окна по сетке">🧹</button>
         <button class="icon-btn pl-close" title="Закрыть каталог">✕</button>
       </div>
       <div class="pl-hint">Перетащите на доску или нажмите — панель встанет и её можно тянуть за заголовок и растягивать за угол.</div>
+      <div class="pl-tools"><button class="btn pl-tidy-all">🧹 Разложить все окна</button></div>
       <div class="pl-list">${ITEMS.map(i => `
         <div class="pl-item" draggable="true" data-id="${i.id}" title="${i.title}">
           <span class="pl-ic">${i.icon}</span>
@@ -259,6 +290,8 @@
           <span class="pl-dot ${i.id === 'gh' || i.id === 'console' ? 'sp' : ''}"></span>
         </div>`).join('')}</div>`;
     pl.querySelector('.pl-close').onclick = () => pl.classList.remove('open');
+    pl.querySelector('.pl-tidy').onclick = (e) => { e.stopPropagation(); tidyAll(); };
+    pl.querySelector('.pl-tidy-all').onclick = () => { tidyAll(); pl.classList.remove('open'); };
     pl.querySelectorAll('.pl-item').forEach(el => {
       el.addEventListener('dragstart', e => {
         e.dataTransfer.effectAllowed = 'move';
@@ -285,26 +318,77 @@
   function placeAtDefault(id) {
     const it = itemOf(id);
     if (!it) return;
-    const box = boardBox();
     if (layout[id]) {
+      const t = document.querySelector('.bp-tile[data-tile="' + id + '"]');
+      if (t) {
+        const l = layout[id];
+        const v = visibleRect();
+        const hidden = l.x + l.w < v.left || l.y + l.h < v.top || l.x > v.left + v.width || l.y > v.top + v.height;
+        if (hidden) {
+          const f = flowScan(id, l.w, l.h);
+          layout[id].x = f.x; layout[id].y = f.y; layout[id].z = ++zTop;
+          t.style.left = f.x + 'px';
+          t.style.top = f.y + 'px';
+          t.style.zIndex = zTop;
+          save();
+        } else {
+          activateTile(id);
+        }
+      }
       const pl0 = $('palette');
       if (pl0) pl0.classList.remove('open');
-      activateTile(id);
       return;
     }
     const def = it.def;
-    let x = 12, y = 110;
-    const C = window.CANVAS;
-    if (C && C.visible) {
-      const v = C.visible();
-      x = Math.max(12, v.left + 24);
-      y = Math.max(12, v.top + 80);
-    }
-    for (const k in layout) {
-      const t = layout[k];
-      if (Math.abs(t.x - x) < def.w / 2) y = Math.max(y, t.y + t.h + 10);
-    }
-    placeTile(id, x, y, def.w, def.h);
+    const f = flowScan(id, def.w, def.h);
+    placeTile(id, f.x, f.y, def.w, def.h);
+  }
+
+  /* Авторасположение всех окон по кнопке: каскад колонок в видимой области доски.
+     Каждое окно сохраняет свой размер (сужается до ширины колонки),
+     расстановка балансируется по высоте (окно идёт в самую низкую колонку). */
+  function tidyAll() {
+    const ids = Object.keys(layout).filter(id => {
+      if (!itemOf(id)) return false;
+      return !!document.querySelector('.bp-tile[data-tile="' + id + '"]');
+    });
+    if (!ids.length) return;
+    const v = visibleRect();
+    const gap = 16;
+    const leftEdge = snap(v.left + 24);
+    const topEdge = snap(v.top + 10);
+    const rightEdge = Math.max(leftEdge + 400, safeRightX() - 12);
+    const availW = rightEdge - leftEdge;
+    const widths = ids.map(id => layout[id].w || itemOf(id).def.w);
+    const avg = widths.reduce((a, b) => a + b, 0) / widths.length;
+    let cols = Math.max(1, Math.floor((availW + gap) / (Math.min(avg, 380) + gap)));
+    cols = Math.min(ids.length, cols, Math.max(1, Math.floor((availW + gap) / (MIN_W + gap))));
+    const colW = (availW - (cols - 1) * gap) / cols;
+    const bottoms = new Array(cols).fill(topEdge);
+    const order = ids.slice().sort((a, b) =>
+      (layout[a].y - layout[b].y) || (layout[a].x - layout[b].x));
+    order.forEach(id => {
+      let c = 0;
+      for (let i = 1; i < cols; i++) if (bottoms[i] < bottoms[c]) c = i;
+      const natW = layout[id].w || itemOf(id).def.w;
+      const natH = layout[id].h || itemOf(id).def.h;
+      const w = Math.max(MIN_W, Math.min(natW, colW));
+      const h = Math.max(MIN_H, natH);
+      const x = snap(leftEdge + c * (colW + gap) + (colW - w) / 2);
+      const y = snap(bottoms[c]);
+      const cl = clamp(id, x, y, w, h);
+      const t = document.querySelector('.bp-tile[data-tile="' + id + '"]');
+      layout[id] = { x: cl.x, y: cl.y, w: cl.w, h: cl.h, z: ++zTop };
+      if (t) {
+        t.style.left = cl.x + 'px';
+        t.style.top = cl.y + 'px';
+        t.style.width = cl.w + 'px';
+        t.style.height = cl.h + 'px';
+        t.style.zIndex = zTop;
+      }
+      bottoms[c] = cl.y + cl.h + gap;
+    });
+    save();
   }
 
   /* ---------- Плитки ---------- */
@@ -448,6 +532,7 @@
       document.body.style.userSelect = '';
       document.removeEventListener('pointermove', move);
       document.removeEventListener('pointerup', up);
+      document.removeEventListener('pointercancel', up);
       if (layout[id]) {
         layout[id].w = tile.offsetWidth;
         let nx = tile.offsetLeft, ny = tile.offsetTop;
@@ -463,6 +548,7 @@
     };
     document.addEventListener('pointermove', move);
     document.addEventListener('pointerup', up);
+    document.addEventListener('pointercancel', up);
   }
 
   function resizeYStart(e0, tile, id) {
@@ -481,6 +567,7 @@
       document.body.style.userSelect = '';
       document.removeEventListener('pointermove', move);
       document.removeEventListener('pointerup', up);
+      document.removeEventListener('pointercancel', up);
       if (layout[id]) {
         layout[id].h = tile.offsetHeight;
         let nx = tile.offsetLeft, ny = tile.offsetTop;
@@ -496,6 +583,7 @@
     };
     document.addEventListener('pointermove', move);
     document.addEventListener('pointerup', up);
+    document.addEventListener('pointercancel', up);
   }
 
   function moveStart(e0, tile, id) {
@@ -518,6 +606,7 @@
       document.body.style.userSelect = '';
       document.removeEventListener('pointermove', move);
       document.removeEventListener('pointerup', up);
+      document.removeEventListener('pointercancel', up);
       if (layout[id]) {
         let nx = tile.offsetLeft, ny = tile.offsetTop;
         if (collides(nx, ny, tile.offsetWidth, tile.offsetHeight, id)) {
@@ -535,6 +624,7 @@
     };
     document.addEventListener('pointermove', move);
     document.addEventListener('pointerup', up);
+    document.addEventListener('pointercancel', up);
   }
 
   function resizeStart(e0, tile, id) {
@@ -555,6 +645,7 @@
       document.body.style.userSelect = '';
       document.removeEventListener('pointermove', move);
       document.removeEventListener('pointerup', up);
+      document.removeEventListener('pointercancel', up);
       if (layout[id]) {
         layout[id].w = tile.offsetWidth;
         layout[id].h = tile.offsetHeight;
@@ -573,6 +664,7 @@
     };
     document.addEventListener('pointermove', move);
     document.addEventListener('pointerup', up);
+    document.addEventListener('pointercancel', up);
   }
 
   function resetTiles() {
@@ -631,11 +723,15 @@
     const ov = $('board-panels');
     if (!ov) return;
     setBoardMode(true);
-    const box = boardBox();
+    const v0 = visibleRect();
     Object.keys(layout).forEach(id => {
       const t = layout[id];
       if (!itemOf(id)) { delete layout[id]; return; }
-      const c = clamp(id, t.x || 12, t.y || 110, t.w, t.h);
+      const off = t.x + (t.w || 80) < v0.left || t.y + (t.h || 60) < v0.top ||
+        t.x > v0.left + v0.width || t.y > v0.top + v0.height;
+      let dx = t.x || 12, dy = t.y || 110;
+      if (off) { const f = flowScan(id, t.w || 80, t.h || 60); dx = f.x; dy = f.y; }
+      const c = clamp(id, dx, dy, t.w, t.h);
       layout[id] = { x: c.x, y: c.y, w: c.w, h: c.h, z: ++zTop };
       placeTileDOM(id, layout[id]);
     });
@@ -696,6 +792,8 @@
   function init() {
     const b = $('btn-place');
     if (b) b.onclick = () => togglePalette();
+    const tb = $('btn-tidy');
+    if (tb) tb.onclick = () => { tidyAll(); };
     buildPalette();
     wireDrop();
 
@@ -713,6 +811,7 @@
 
     window.PLACE = window.PLACE || {};
     window.PLACE.reload = reload;
+    window.PLACE.tidy = tidyAll;
 
     restore();
   }

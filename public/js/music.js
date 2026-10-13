@@ -165,7 +165,8 @@
     const was = cur;
     cur = i;
     if (shuffle && cur !== was) history.push(was);
-    renderNow();
+    const now = document.querySelector('.mu-now');
+    if (now) now.innerHTML = renderNow();
     renderList();
     const audio = $('mu-audio');
     if (!audio) return;

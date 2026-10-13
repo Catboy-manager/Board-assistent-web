@@ -93,7 +93,16 @@ function defaultDb() {
 }
 
 function saveDb() {
-  fs.writeFileSync(DB_FILE, JSON.stringify(db, null, 2));
+  /* Атомарная запись: temp + rename, чтобы транзакция не потерялась
+     при крахе/отключении питания посреди writeFileSync. */
+  const tmp = DB_FILE + '.tmp';
+  try {
+    fs.writeFileSync(tmp, JSON.stringify(db, null, 2));
+    fs.renameSync(tmp, DB_FILE);
+  } catch (e) {
+    console.error('saveDb failed:', e.message);
+    try { fs.unlinkSync(tmp); } catch (e2) {}
+  }
 }
 
 function publicDb() {

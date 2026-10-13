@@ -172,6 +172,7 @@
     if (src === playingUrl) { vd.play().catch(() => {}); return; }
     playingUrl = src;
     vd.src = src;
+    vd.play().catch(() => {});
   }
 
   function next() {

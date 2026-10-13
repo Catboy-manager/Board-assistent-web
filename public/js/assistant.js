@@ -170,12 +170,11 @@ function typing() {
           buf = buf.slice(idx + 1);
           if (!line.startsWith('data: ')) continue;
           const payload = line.slice(6);
-          try {
-            const ev = JSON.parse(payload);
-            if (ev.error) throw new Error(ev.error);
-            if (ev.delta) { acc += ev.delta; bodyEl.textContent = acc; }
-            if (ev.files) files = ev.files;
-          } catch (e) {}
+          let ev = null;
+          try { ev = JSON.parse(payload); } catch (e) { continue; }
+          if (ev.error) throw new Error(ev.error);
+          if (ev.delta) { acc += ev.delta; bodyEl.textContent = acc; }
+          if (ev.files) files = ev.files;
         }
         bodyEl.textContent = acc;
         const box = $('ai-messages');

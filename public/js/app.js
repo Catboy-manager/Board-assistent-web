@@ -648,6 +648,17 @@ window.APP = {
       this.db._aiProjects = c.ai && c.ai.projectsDir || '';
       this.db._aiModel = c.ai && c.ai.model || '';
       this.db._aiSys = c.ai && c.ai.systemPrompt || '';
+      /* Поля формы строятся из кэша db до ответа сервера — заполняем их здесь,
+         иначе «Сохранить» затирает серверный конфиг пустыми значениями. */
+      const set = (id, val) => { const el = document.getElementById(id); if (el) el.value = val == null ? '' : val; };
+      const mode = document.getElementById('ai-mode-in');
+      if (mode) mode.value = (c.ai && c.ai.mode) || 'cli';
+      set('ai-base', c.ai && c.ai.baseUrl);
+      set('ai-apikey', c.ai && c.ai.apiKey);
+      set('ai-bin', c.ai && c.ai.opencodeBin);
+      set('ai-projects', c.ai && c.ai.projectsDir);
+      set('ai-model-in', c.ai && c.ai.model);
+      set('ai-sys', c.ai && c.ai.systemPrompt);
       const e = document.getElementById('ai-config-status');
       if (e) e.textContent = 'Загружено из сервера ✓';
     } catch (e) {}
@@ -689,6 +700,12 @@ window.APP = {
         <div class="guide-sec"><b>⚙️ Настройки</b>
           <ul>
             <li>Фон (цвет/градиент/изображение, размытие, затемнение) и ИИ (движок, модель, рабочая папка).</li>
+          </ul>
+        </div>
+        <div class="guide-sec"><b>🧩 Окна-панели</b>
+          <ul>
+            <li>Вынесите панели на доску (каталог <b>🧩</b> — клик или перетаскивание), тяните за заголовок, растягивайте за угол (и края).</li>
+            <li>Кнопка <b>🧹</b> раскладывает все окна по сетке одним нажатием.</li>
           </ul>
         </div>
         <div class="guide-sec"><b>🌧 Погода</b>
@@ -735,9 +752,10 @@ window.APP = {
       dragging = false;
       document.body.style.userSelect = '';
       document.body.style.cursor = '';
-      localStorage.setItem('aiPanelWidth', String(this.aiPanelWidth(e.clientX)));
+      if (e && typeof e.clientX === 'number') localStorage.setItem('aiPanelWidth', String(this.aiPanelWidth(e.clientX)));
       document.removeEventListener('pointermove', onMove);
       document.removeEventListener('pointerup', onUp);
+      document.removeEventListener('pointercancel', onUp);
     };
     rz.addEventListener('pointerdown', (e) => {
       e.preventDefault();
@@ -747,6 +765,7 @@ window.APP = {
       try { rz.setPointerCapture(e.pointerId); } catch (err) {}
       document.addEventListener('pointermove', onMove);
       document.addEventListener('pointerup', onUp);
+      document.addEventListener('pointercancel', onUp);
     });
   },
 
@@ -816,7 +835,11 @@ window.APP = {
       if (!touchCard) return;
       const card = document.querySelector(`.card[data-card="${touchCard}"]`);
       if (card) card.style.outline = '';
-      const colBody = e.target.closest('.col-body');
+      /* target у touchend — элемент touchstart (карточка), а не точка отпускания;
+         колонку ищем под пальцем. */
+      const t0 = e.changedTouches && e.changedTouches[0];
+      const el = t0 ? document.elementFromPoint(t0.clientX, t0.clientY) : null;
+      const colBody = el && el.closest ? el.closest('.col-body') : null;
       if (colBody) {
         const colId = colBody.dataset.col;
         const c = this.db.board.cards.find(c => c.id === touchCard);
