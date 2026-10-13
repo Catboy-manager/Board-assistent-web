@@ -1,0 +1,23 @@
+:root[data-theme="dark"] {
+  --bg-gradient: radial-gradient(1600px 900px at 50% 0%, #15182a 0%, #10111d 55%, #0b0d18 100%);
+  --text-primary: #f7f8fa;
+  --text-secondary: #b8c1cc;
+  --panel-glass: rgba(24, 26, 42, 0.7);
+  --panel-border: rgba(148, 158, 200, 0.24);
+  --accent: rgba(118, 138, 255, 0.9);
+  --shadow-soft: 0 20px 60px rgba(12, 14, 30, 0.5);
+  --pill-bg: rgba(28, 30, 48, 0.8);
+  --pill-border: rgba(148, 158, 200, 0.28);
+}
+
+:root[data-theme="light"] {
+  --bg-gradient: radial-gradient(1600px 900px at 50% 0%, #f7f9fc 0%, #eef2f8 60%, #e6ebf4 100%);
+  --text-primary: #1a1f2b;
+  --text-secondary: #4a5568;
+  --panel-glass: rgba(255, 255, 255, 0.78);
+  --panel-border: rgba(130, 140, 170, 0.18);
+  --accent: rgba(92, 110, 255, 0.95);
+  --shadow-soft: 0 20px 60px rgba(140, 150, 200, 0.24);
+  --pill-bg: rgba(255, 255, 255, 0.9);
+  --pill-border: rgba(140, 150, 190, 0.22);
+}
