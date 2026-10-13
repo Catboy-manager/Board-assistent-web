@@ -39,6 +39,26 @@ module.exports = (deps) => {
 
   const NOTIFY_KEY = process.env.KANBAN_NOTIFY_KEY || '';
 
+  /* Дедупликация: телефон-форвардер повторно шлёт одно и то же уведомление
+     (апдейты прогресса «Отправка видео…», постоянные «3 updates» и т.п.) по
+     нескольку раз в секунду. Игнорируем повторы идентичного содержимого в окне. */
+  const DEDUP_WINDOW = Math.max(0, parseInt(process.env.KANBAN_NOTIFY_DEDUP || '30000', 10) || 0);
+  function fpOf(x) {
+    return [x.app, x.title, x.text, x.user, x.chat].map(v => String(v == null ? '' : v).toLowerCase()).join('\u0000');
+  }
+  function isDuplicate(rec) {
+    if (!DEDUP_WINDOW) return false;
+    const fp = fpOf(rec);
+    const now = Date.now();
+    for (let i = 0; i < history.length && i < 60; i++) {
+      const h = history[i];
+      if (now - h.ts > DEDUP_WINDOW) break;
+      if (fpOf(h) === fp) return true;
+    }
+    return false;
+  }
+
+
   function saveHistory() {
     try { fs.writeFileSync(FILE, JSON.stringify({ history }, null, 2)); } catch (e) {}
   }
@@ -59,6 +79,7 @@ module.exports = (deps) => {
 
   function addNotify(item) {
     if (isIgnored(item)) return null;
+    if (isDuplicate(item)) return null;
     const rec = Object.assign({ id: 'n' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), ts: Date.now() }, item);
     history.unshift(rec);
     if (history.length > HISTORY_MAX) history = history.slice(0, HISTORY_MAX);

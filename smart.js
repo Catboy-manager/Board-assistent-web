@@ -838,11 +838,16 @@ module.exports = (deps) => {
     if (a === 'say' || a === 'tts') {
       if (!text.trim()) return { error: 'пустой текст' };
       if (canLocal) {
-        try {
-          const r = await glagolSay(dev, text);
-          if (r && r.status === 'SUCCESS') return { ok: true, text: 'станция произнесла фразу' };
-          if (r && r.status) return { error: 'станция ответила: ' + r.status };
-        } catch (e) { /* падаем в облако */ }
+        /* update_form (repeat_phrase) возвращает SUCCESS, но станция молчит,
+           когда Алиса не в активном диалоге. Надёжнее голосовой команды нет:
+           sendText «произнеси …» — станция всегда говорит. Если не вышло —
+           пробуем update_form и только потом облачный сценарий. */
+        const phrase = String(text).replace(/[«»"'`]/g, '').replace(/[\r\n]+/g, ' ').replace(/\s+/g, ' ').trim();
+        let r = null;
+        try { r = await glagolLocal(dev, { command: 'sendText', text: 'произнеси ' + phrase }); } catch (e) {}
+        if (!r || r.status !== 'SUCCESS') { try { r = await glagolSay(dev, text); } catch (e) {} }
+        if (r && r.status === 'SUCCESS') return { ok: true, text: 'станция произнесла фразу' };
+        if (r && r.status) return { error: 'станция ответила: ' + r.status };
       }
       return Object.assign({ ok: true }, await yaSpeak(dev, text, true));
     }

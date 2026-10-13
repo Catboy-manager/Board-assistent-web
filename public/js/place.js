@@ -69,16 +69,33 @@
   }
   const snap = v => Math.round(v / SNAP) * SNAP;
 
+  /* Прямоугольники колонок с задачами (карточками) в координатах доски.
+     Панели-окна обязаны их обходить, чтобы не «наезжать» на карточки. */
+  let avoidRects = [];
+  function cardRects() {
+    const out = [];
+    document.querySelectorAll('#board-inner .column').forEach(el => {
+      const w = el.offsetWidth, h = el.offsetHeight;
+      if (w > 0 && h > 0) out.push({ x: el.offsetLeft, y: el.offsetTop, w, h });
+    });
+    return out;
+  }
+  function refreshAvoid() { avoidRects = cardRects(); }
+
   function collides(x, y, w, h, id) {
     for (const k in layout) {
       if (k === id) continue;
       const t = layout[k];
       if (x < t.x + t.w && x + w > t.x && y < t.y + t.h && y + h > t.y) return true;
     }
+    for (const c of avoidRects) {
+      if (x < c.x + c.w && x + w > c.x && y < c.y + c.h && y + h > c.y) return true;
+    }
     return false;
   }
 
   function freeSlot(x, y, w, h, id) {
+    refreshAvoid();
     if (!collides(x, y, w, h, id)) return { x, y };
     const maxR = CANVAS_BOUND;
     for (let r = SNAP; r <= maxR; r += SNAP) {
@@ -109,6 +126,7 @@
   /* Свободное место В видимой области доски: столбцы сверху вниз, слева направо,
      никогда не уводя панель за нижний/правый край видимой части. */
   function flowScan(id, w, h) {
+    refreshAvoid();
     const v = visibleRect();
     const maxRight = Math.min(Math.max(400, safeRightX()), CANVAS_BOUND - w);
     const x0 = snap(v.left + 24);
@@ -344,40 +362,52 @@
     placeTile(id, f.x, f.y, def.w, def.h);
   }
 
-  /* Авторасположение всех окон по кнопке: каскад колонок в видимой области доски.
-     Каждое окно сохраняет свой размер (сужается до ширины колонки),
-     расстановка балансируется по высоте (окно идёт в самую низкую колонку). */
+  function rectListCollide(x, y, w, h, list) {
+    for (const c of avoidRects) {
+      if (x < c.x + c.w && x + w > c.x && y < c.y + c.h && y + h > c.y) return true;
+    }
+    for (const c of list) {
+      if (x < c.x + c.w && x + w > c.x && y < c.y + c.h && y + h > c.y) return true;
+    }
+    return false;
+  }
+
+  /* Авторасположение всех окон по кнопке: укладка в видимой области «первым
+     подходящим» — слева-направо, сверху-вниз. Колонки задач и уже поставленные
+     окна — препятствия, поэтому окна заполняют место справа и ниже карточек и
+     никогда их не перекрывают. Размер окна сохраняется. */
   function tidyAll() {
+    refreshAvoid();
     const ids = Object.keys(layout).filter(id => {
       if (!itemOf(id)) return false;
       return !!document.querySelector('.bp-tile[data-tile="' + id + '"]');
     });
     if (!ids.length) return;
     const v = visibleRect();
-    const gap = 16;
-    const leftEdge = snap(v.left + 24);
-    const topEdge = snap(v.top + 10);
-    const rightEdge = Math.max(leftEdge + 400, safeRightX() - 12);
-    const availW = rightEdge - leftEdge;
-    const widths = ids.map(id => layout[id].w || itemOf(id).def.w);
-    const avg = widths.reduce((a, b) => a + b, 0) / widths.length;
-    let cols = Math.max(1, Math.floor((availW + gap) / (Math.min(avg, 380) + gap)));
-    cols = Math.min(ids.length, cols, Math.max(1, Math.floor((availW + gap) / (MIN_W + gap))));
-    const colW = (availW - (cols - 1) * gap) / cols;
-    const bottoms = new Array(cols).fill(topEdge);
+    const left = snap(v.left + 24);
+    const top = snap(Math.max(v.top, safeTopY()) + 10);
+    const right = Math.max(left + MIN_W, safeRightX() - 12);
+    const vBottom = top + Math.max(MIN_H, v.height);
+    const limit = vBottom + 4000;
     const order = ids.slice().sort((a, b) =>
       (layout[a].y - layout[b].y) || (layout[a].x - layout[b].x));
+    const placed = [];
     order.forEach(id => {
-      let c = 0;
-      for (let i = 1; i < cols; i++) if (bottoms[i] < bottoms[c]) c = i;
+      const t = document.querySelector('.bp-tile[data-tile="' + id + '"]');
       const natW = layout[id].w || itemOf(id).def.w;
       const natH = layout[id].h || itemOf(id).def.h;
-      const w = Math.max(MIN_W, Math.min(natW, colW));
-      const h = Math.max(MIN_H, natH);
-      const x = snap(leftEdge + c * (colW + gap) + (colW - w) / 2);
-      const y = snap(bottoms[c]);
-      const cl = clamp(id, x, y, w, h);
-      const t = document.querySelector('.bp-tile[data-tile="' + id + '"]');
+      const w = Math.max(MIN_W, natW, t ? t.offsetWidth : 0);
+      const h = Math.max(MIN_H, natH, t ? t.offsetHeight : 0);
+      let px = null, py = top;
+      scan:
+      for (let y = top; y + h <= limit; y += SNAP) {
+        for (let x = left; x + w <= right; x += SNAP) {
+          if (!rectListCollide(x, y, w, h, placed)) { px = x; py = y; break scan; }
+        }
+      }
+      if (px === null) { px = left; py = vBottom + 100; }
+      const cl = clamp(id, px, py, w, h);
+      placed.push({ x: cl.x, y: cl.y, w: cl.w, h: cl.h });
       layout[id] = { x: cl.x, y: cl.y, w: cl.w, h: cl.h, z: ++zTop };
       if (t) {
         t.style.left = cl.x + 'px';
@@ -386,7 +416,6 @@
         t.style.height = cl.h + 'px';
         t.style.zIndex = zTop;
       }
-      bottoms[c] = cl.y + cl.h + gap;
     });
     save();
   }
@@ -720,6 +749,7 @@
   function restore() {
     loadState();
     if (!Object.keys(layout).length) return;
+    refreshAvoid();
     const ov = $('board-panels');
     if (!ov) return;
     setBoardMode(true);
