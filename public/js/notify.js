@@ -93,6 +93,7 @@
         const title = '🔔 ' + (it.app || 'Телефон') + (it.title ? ': ' + it.title : '');
         toast(title, it.text || '');
         notify(title, it.text || '');
+        try { if (window.NOTIFY_SOUND && window.NOTIFY_SOUND.play) window.NOTIFY_SOUND.play(it.app, it.title, it.text, it.user, it.chat); } catch (e) {}
         pushLive(it);
       };
       es.onerror = () => {};
