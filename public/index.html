@@ -87,7 +87,13 @@
   <div id="panels-right" class="panes-right">
 
 
-  <div id="toast-container" class="toast-container"></div>
+  <div id="notif-drawer" class="notif-drawer" aria-label="Уведомления">
+    <div class="notif-drawer-head">
+      <h3>Уведомления</h3>
+      <button class="btn-ghost" id="notif-drawer-close">×</button>
+    </div>
+    <div class="notif-drawer-list" id="notif-drawer-list"></div>
+  </div>
   <audio id="notif-sound" preload="auto"></audio>
 
   <script src="/js/core/theme.js"></script>
@@ -95,6 +101,7 @@
   <script src="/js/core/nav.js"></script>
   <script src="/js/core/notify-sound.js"></script>
   <script src="/js/core/smart-bridge.js"></script>
+  <script src="/js/core/notif-drawer.js"></script>
   <script src="/js/core/dashboard-loader.js"></script>
   <script src="/js/components/kanban-ui.js"></script>
   <script src="/js/widgets/movies-widget.js"></script>

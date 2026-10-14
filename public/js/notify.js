@@ -94,6 +94,7 @@
         toast(title, it.text || '');
         notify(title, it.text || '');
         try { if (window.NOTIFY_SOUND && window.NOTIFY_SOUND.play) window.NOTIFY_SOUND.play(it.app, it.title, it.text, it.user, it.chat); } catch (e) {}
+        try { if (window.NOTIF_DRAWER && window.NOTIF_DRAWER.push) window.NOTIF_DRAWER.push(it); } catch (e) {}
         pushLive(it);
       };
       es.onerror = () => {};
