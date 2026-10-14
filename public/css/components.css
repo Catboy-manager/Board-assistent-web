@@ -181,3 +181,24 @@
 .dash-card-body.collapsed {
   display: none !important;
 }
+
+.dash-card.dragging {
+  opacity: 0.4;
+}
+
+.preview-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.preview-item {
+  opacity: 0.9;
+  transform: scale(0.98);
+}
+.dash-card-body.expanded .preview-wrap {
+  display: none;
+}
+.dash-card-body .more-btn {
+  margin-top: 10px;
+  align-self: flex-start;
+}
