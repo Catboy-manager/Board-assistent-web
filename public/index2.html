@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="ru" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NeuroBoard 2.0</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/dashboard2.css">
+</head>
+<body>
+  <header class="dash2-header">
+    <div class="dash2-brand">
+      <span class="dash2-dot"></span>
+      <strong>NeuroBoard</strong>
+    </div>
+    <nav class="dash2-nav">
+      <button class="dash2-btn active" data-view="dashboard2">Дашборд</button>
+      <button class="dash2-btn" data-view="kanban" onclick="location.href='/'">Канбан</button>
+      <button class="dash2-btn" data-view="smart" onclick="location.href='/'">Умный дом</button>
+    </nav>
+    <div class="dash2-actions">
+      <button class="dash2-icon" id="theme-toggle2" title="Тема">◑</button>
+      <button class="dash2-icon" id="notif-toggle2" title="Уведомления">🔔</button>
+    </div>
+  </header>
+
+  <main class="dash2-grid" id="dash2-grid">
+    <article class="dash2-card" data-module="movies">
+      <div class="dash2-card-header">
+        <h3 class="dash2-title">Фильмы</h3>
+      </div>
+      <div class="dash2-body" id="d2-movies">
+        <div class="dash2-preview" id="pv-movies"></div>
+        <button class="dash2-more" data-expand="d2-movies">Показать всё</button>
+      </div>
+    </article>
+
+    <article class="dash2-card" data-module="news">
+      <div class="dash2-card-header"><h3 class="dash2-title">Новости</h3></div>
+      <div class="dash2-body" id="d2-news">
+        <div class="dash2-preview" id="pv-news"></div>
+        <button class="dash2-more" data-expand="d2-news">Показать всё</button>
+      </div>
+    </article>
+
+    <article class="dash2-card" data-module="youtube">
+      <div class="dash2-card-header"><h3 class="dash2-title">YouTube</h3></div>
+      <div class="dash2-body" id="d2-youtube">
+        <div class="dash2-preview" id="pv-youtube"></div>
+        <button class="dash2-more" data-expand="d2-youtube">Показать всё</button>
+      </div>
+    </article>
+
+    <article class="dash2-card" data-module="games">
+      <div class="dash2-card-header"><h3 class="dash2-title">Игры</h3></div>
+      <div class="dash2-body" id="d2-games">
+        <div class="dash2-preview" id="pv-games"></div>
+        <button class="dash2-more" data-expand="d2-games">Показать всё</button>
+      </div>
+    </article>
+
+    <article class="dash2-card" data-module="smart">
+      <div class="dash2-card-header"><h3 class="dash2-title">Умный дом</h3></div>
+      <div class="dash2-body" id="d2-smart">
+        <div class="dash2-preview" id="pv-smart"></div>
+        <button class="dash2-more" data-expand="d2-smart">Показать всё</button>
+      </div>
+    </article>
+
+    <article class="dash2-card" data-module="notify">
+      <div class="dash2-card-header"><h3 class="dash2-title">Уведомления</h3></div>
+      <div class="dash2-body" id="d2-notify">
+        <div class="dash2-preview" id="pv-notify"></div>
+        <button class="dash2-more" data-expand="d2-notify">Показать всё</button>
+      </div>
+    </article>
+
+    <article class="dash2-card" data-module="msgs">
+      <div class="dash2-card-header"><h3 class="dash2-title">Статистика</h3></div>
+      <div class="dash2-body" id="d2-msgs">
+        <div class="dash2-preview" id="pv-msgs"></div>
+        <button class="dash2-more" data-expand="d2-msgs">Показать всё</button>
+      </div>
+    </article>
+
+    <article class="dash2-card" data-module="stats">
+      <div class="dash2-card-header"><h3 class="dash2-title">Сервер</h3></div>
+      <div class="dash2-body" id="d2-stats">
+        <div class="dash2-preview" id="pv-stats"></div>
+        <button class="dash2-more" data-expand="d2-stats">Показать всё</button>
+      </div>
+    </article>
+
+    <article class="dash2-card" data-module="interests">
+      <div class="dash2-card-header"><h3 class="dash2-title">Интересы</h3></div>
+      <div class="dash2-body" id="d2-interests">
+        <div class="dash2-preview" id="pv-interests"></div>
+        <button class="dash2-more" data-expand="d2-interests">Показать всё</button>
+      </div>
+    </article>
+
+    <article class="dash2-card" data-module="gh">
+      <div class="dash2-card-header"><h3 class="dash2-title">GitHub</h3></div>
+      <div class="dash2-body" id="d2-gh">
+        <div class="dash2-preview" id="pv-gh"></div>
+        <button class="dash2-more" data-expand="d2-gh">Показать всё</button>
+      </div>
+    </article>
+
+    <article class="dash2-card" data-module="console">
+      <div class="dash2-card-header"><h3 class="dash2-title">Консоль</h3></div>
+      <div class="dash2-body" id="d2-console">
+        <div class="dash2-preview" id="pv-console"></div>
+        <button class="dash2-more" data-expand="d2-console">Показать всё</button>
+      </div>
+    </article>
+
+    <article class="dash2-card" data-module="files">
+      <div class="dash2-card-header"><h3 class="dash2-title">Файлы</h3></div>
+      <div class="dash2-body" id="d2-files">
+        <div class="dash2-preview" id="pv-files"></div>
+        <button class="dash2-more" data-expand="d2-files">Показать всё</button>
+      </div>
+    </article>
+
+    <article class="dash2-card" data-module="ops">
+      <div class="dash2-card-header"><h3 class="dash2-title">Трансляция</h3></div>
+      <div class="dash2-body" id="d2-ops">
+        <div class="dash2-preview" id="pv-ops"></div>
+        <button class="dash2-more" data-expand="d2-ops">Показать всё</button>
+      </div>
+    </article>
+
+    <article class="dash2-card" data-module="assist">
+      <div class="dash2-card-header"><h3 class="dash2-title">ИИ-ассистент</h3></div>
+      <div class="dash2-body" id="d2-assist">
+        <div class="dash2-preview" id="pv-assist"></div>
+        <button class="dash2-more" data-expand="d2-assist">Показать всё</button>
+      </div>
+    </article>
+
+    <article class="dash2-card" data-module="music">
+      <div class="dash2-card-header"><h3 class="dash2-title">Музыка</h3></div>
+      <div class="dash2-body" id="d2-music">
+        <div class="dash2-preview" id="pv-music"></div>
+        <button class="dash2-more" data-expand="d2-music">Показать всё</button>
+      </div>
+    </article>
+
+    <article class="dash2-card" data-module="sounds">
+      <div class="dash2-card-header"><h3 class="dash2-title">Звуки</h3></div>
+      <div class="dash2-body" id="d2-sounds">
+        <div class="dash2-preview" id="pv-sounds"></div>
+        <button class="dash2-more" data-expand="d2-sounds">Показать всё</button>
+      </div>
+    </article>
+  </main>
+
+  <div id="notif-drawer2" class="notif-drawer">
+    <div class="notif-drawer-head"><h3>Уведомления</h3><button class="btn-ghost" id="notif-drawer-close2">×</button></div>
+    <div class="notif-drawer-list" id="notif-drawer-list2"></div>
+  </div>
+  <audio id="notif-sound" preload="auto"></audio>
+
+  <script src="/js/core/theme.js"></script>
+  <script src="/js/core/notif-drawer.js"></script>
+  <script src="/js/core/notify-sound.js"></script>
+  <script src="/js/components/sounds-ui.js"></script>
+  <script src="/js/core/dashboard2.js"></script>
+</body>
+</html>
