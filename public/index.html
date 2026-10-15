@@ -4,10 +4,13 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <meta name="mobile-web-app-capable" content="yes">
-  <title>NeuroBoard</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <title>Kanban Board</title>
+  <script>
+  if (location.protocol === 'https:' && !window.isSecureContext) {
+    location.replace('http://' + location.hostname + ':8080/setup');
+  }
+  </script>
+  <link rel="stylesheet" href="/css/style.css">
   <link rel="stylesheet" href="/css/base.css">
   <link rel="stylesheet" href="/css/themes.css">
   <link rel="stylesheet" href="/css/layout.css">
@@ -15,59 +18,44 @@
   <link rel="stylesheet" href="/css/dashboard.css">
 </head>
 <body>
-  <div class="bg-glass" aria-hidden="true"></div>
-  <header class="app-header">
-    <div class="header-left">
-      <div class="brand">
-        <span class="brand-logo">◈</span>
-        <span class="brand-name">NeuroBoard</span>
+  <div id="bg" aria-hidden="true"></div>
+
+  <header id="topbar">
+    <div class="brand">
+      <span class="logo">📋</span>
+      <div class="brand-text">
+        <h1>Kanban Board</h1>
+        <div id="clock"></div>
       </div>
-      <nav class="nav-pill" id="main-nav">
-        <button class="nav-btn active" data-view="dashboard">Дашборд</button>
-        <button class="nav-btn" data-view="kanban">Канбан</button>
-        <button class="nav-btn" data-view="smart">Умный дом</button>
-        <button class="nav-btn" data-view="media">Медиа</button>
-        <button class="nav-btn" data-view="tools">Инструменты</button>
-      </nav>
     </div>
-    <div class="header-right">
-      <div class="theme-switch">
-        <button class="theme-btn" data-theme-toggle title="Переключить тему">◑</button>
+
+    <div id="weather" class="weather">
+      <div class="we-now">
+        <span id="w-ico">⛅</span>
+        <span id="w-temp">–</span>
+        <span class="w-desc" id="w-desc"></span>
       </div>
-      <div class="notify-indicator" id="notify-indicator" title="Уведомления">
-        <span class="bell">🔔</span>
-        <span class="badge hidden" id="notify-badge">0</span>
-      </div>
+      <div class="we-tomorrow" id="w-tomorrow" title="Прогноз на завтра"></div>
+    </div>
+
+    <div class="top-actions">
+      <button class="theme-btn" data-theme-toggle title="Переключить тему">◑</button>
+      <button id="btn-wake" class="icon-btn" title="Всегда слушать: «Саша» / «Саня» / «Александр»">🎤<span id="wake-ind" class="wake-ind"></span></button>
+      <button id="btn-events" class="icon-btn" title="События и уведомления">🔔<span id="events-badge" class="badge hidden"></span></button>
+      <button id="btn-guide" class="icon-btn" title="Руководство по доске">❓</button>
+      <button id="btn-place" class="icon-btn" title="Каталог панелей: перетащите на доску">🧩</button>
+      <button id="btn-tidy" class="icon-btn" title="Разложить все окна по сетке">🧹</button>
+      <button id="btn-settings" class="icon-btn" title="Настройки">⚙️</button>
+      <button id="btn-files" class="icon-btn" title="Файлы на этом ПК">📁</button>
     </div>
   </header>
 
-  <main class="app-main">
-    <section class="view active" id="view-dashboard">
-      <div class="dashboard-grid">
-        <article class="dash-card" data-module="movies"><div class="dash-card-header"><h3>Фильмы</h3></div><div class="dash-card-body" id="w-movies"></div></article>
-        <article class="dash-card" data-module="news"><div class="dash-card-header"><h3>Новости</h3></div><div class="dash-card-body" id="w-news"></div></article>
-        
-        <article class="dash-card" data-module="youtube"><div class="dash-card-header"><h3>YouTube</h3></div><div class="dash-card-body" id="w-youtube"></div></article>
-        <article class="dash-card" data-module="smart"><div class="dash-card-header"><h3>Умный дом</h3></div><div class="dash-card-body" id="w-smart"></div></article>
-        <article class="dash-card" data-module="notify"><div class="dash-card-header"><h3>Уведомления</h3></div><div class="dash-card-body" id="w-notify"></div></article>
-        <article class="dash-card" data-module="games"><div class="dash-card-header"><h3>Игры</h3></div><div class="dash-card-body" id="w-games"></div></article>
-        <article class="dash-card" data-module="msgs"><div class="dash-card-header"><h3>Статистика</h3></div><div class="dash-card-body" id="w-msgs"></div></article>
-        <article class="dash-card" data-module="stats"><div class="dash-card-header"><h3>Сервер</h3></div><div class="dash-card-body" id="w-stats"></div></article>
-        <article class="dash-card" data-module="interests"><div class="dash-card-header"><h3>Интересы</h3></div><div class="dash-card-body" id="w-interests"></div></article>
-        <article class="dash-card" data-module="gh"><div class="dash-card-header"><h3>GitHub</h3></div><div class="dash-card-body" id="w-gh"></div></article>
-        <article class="dash-card" data-module="console"><div class="dash-card-header"><h3>Консоль</h3></div><div class="dash-card-body" id="w-console"></div></article>
-        <article class="dash-card" data-module="files"><div class="dash-card-header"><h3>Файлы</h3></div><div class="dash-card-body" id="w-files"></div></article>
-        <article class="dash-card" data-module="ops"><div class="dash-card-header"><h3>Трансляция</h3></div><div class="dash-card-body" id="w-ops"></div></article>
-        <article class="dash-card" data-module="music"><div class="dash-card-header"><h3>Музыка</h3></div><div class="dash-card-body" id="w-music"></div></article>
-            <article class="dash-card" data-module="assist"><div class="dash-card-header"><h3>ИИ-ассистент</h3></div><div class="dash-card-body" id="w-assist"></div></article>
-        <article class="dash-card" data-module="sounds"><div class="dash-card-header"><h3>Звуки</h3></div><div class="dash-card-body" id="w-sounds"></div></article>
-      </div>
-    </section>
-    <section class="view" id="view-kanban"></section>
-    <section class="view" id="view-smart"></section>
-    <section class="view" id="view-media"></section>
-    <section class="view" id="view-tools"></section>
-  </main>
+  <div id="world">
+    <div id="world-bg"></div>
+    <main id="board" aria-label="Канбан-доска">
+      <div id="board-inner"></div>
+    </main>
+
   <div id="side-widget" class="side-widget">
     <div class="sw-head">
       <div class="sw-tabs">
@@ -86,59 +74,203 @@
   </div>
 
   <div id="panels-right" class="panes-right">
+    <div id="ops-panel" class="side-panel ops-panel">
+      <div class="sp-head">
+        <h2>🖥 Ops <span class="sp-sub">трансляция opencode</span></h2>
+        <button class="icon-btn sp-mini" data-minim="ops" title="Свернуть / развернуть">–</button>
+      </div>
+      <div id="sp-ops" class="sp-pane active">
+        <div class="op-res" id="op-res"><span class="op-dot"></span><span>подключение…</span></div>
+        <div class="op-ai" id="op-ai"></div>
+        <div class="op-list" id="op-list"></div>
+      </div>
+    </div>
 
+    <div id="stats-panel" class="side-panel stats-panel">
+      <div class="sp-head">
+        <h2>📊 Сервер</h2>
+        <button class="icon-btn sp-mini" data-minim="stats" title="Свернуть / развернуть">–</button>
+      </div>
+      <div id="sp-stats" class="sp-pane active">
+        <div class="st-tabs">
+          <button class="st-tab active" data-st="disk" title="Заполненность диска">💿</button>
+          <button class="st-tab" data-st="temp" title="Температура">🌡</button>
+          <button class="st-tab" data-st="ram" title="Оперативная память">🧠</button>
+        </div>
+        <div class="st-pane active" id="st-disk"></div>
+        <div class="st-pane" id="st-temp"></div>
+        <div class="st-pane" id="st-ram"></div>
+      </div>
+    </div>
+
+    <div id="sys-panel" class="side-panel sys-panel">
+      <div class="sp-head">
+        <h2>🖥 Система <span class="sp-sub">github + консоль</span></h2>
+        <div class="st-tabs">
+          <button class="st-tab active" data-sys="gh" title="Подборки инструментов с GitHub">⭐</button>
+          <button class="st-tab" data-sys="console" title="Консоль сервера (с LAN — по ключу)">🖥</button>
+        </div>
+        <button class="icon-btn sp-mini" data-minim="sys" title="Свернуть / развернуть">–</button>
+      </div>
+      <div class="sp-pane active" id="sp-gh"></div>
+      <div class="sp-pane" id="sp-console"></div>
+    </div>
+
+    <div id="yt-panel" class="side-panel yt-panel">
+      <div class="sp-head">
+        <h2>▶ YouTube <span class="sp-sub">видео и очередь</span></h2>
+        <button class="icon-btn sp-mini" data-minim="yt" title="Свернуть / развернуть">–</button>
+      </div>
+      <div id="sp-yt" class="sp-pane active"></div>
+    </div>
+
+    <div id="interests-panel" class="side-panel interests-panel">
+      <div class="sp-head">
+        <h2>🧠 Интересы <span class="sp-sub">векторная карта</span></h2>
+        <button class="icon-btn sp-mini" data-minim="interests" title="Свернуть / развернуть">–</button>
+      </div>
+      <div id="sp-interests" class="sp-pane active"></div>
+    </div>
+
+    <div id="games-panel" class="side-panel games-panel">
+      <div class="sp-head">
+        <h2>🎮 Игры <span class="sp-sub">Steam + сторонние</span></h2>
+        <div class="st-tabs">
+          <button class="st-tab active" data-gs="steam" title="Библиотека Steam">🕹</button>
+          <button class="st-tab" data-gs="third" title="Сторонние игры">📀</button>
+          <button class="st-tab" data-gs="cat" title="Каталог игр со сторонних сервисов">🌐</button>
+        </div>
+        <button class="icon-btn sp-mini" data-minim="games" title="Свернуть / развернуть">–</button>
+      </div>
+      <div id="sp-games" class="sp-pane active"></div>
+    </div>
+
+    <div id="msgs-panel" class="side-panel msgs-panel">
+      <div class="sp-head">
+        <h2>🗨 Сообщения <span class="sp-sub">статистика уведомлений</span></h2>
+        <div class="st-tabs">
+          <button class="st-tab active" data-mt="daily" title="График по дням">📅</button>
+          <button class="st-tab" data-mt="hours" title="Распределение по часам">🕐</button>
+          <button class="st-tab" data-mt="apps" title="Приложения">📲</button>
+          <button class="st-tab" data-mt="users" title="Собеседники">👤</button>
+          <button class="st-tab" data-mt="chats" title="Чаты">💬</button>
+        </div>
+        <button class="icon-btn sp-mini" data-minim="msgs" title="Свернуть / развернуть">–</button>
+      </div>
+      <div id="sp-msgs" class="sp-pane active"></div>
+    </div>
+
+    <div id="smart-panel" class="side-panel smart-panel">
+      <div class="sp-head">
+        <h2>🏠 Умный дом <span class="sp-sub">устройства и сценарии</span></h2>
+        <button class="icon-btn sp-mini" data-minim="smart" title="Свернуть / развернуть">–</button>
+      </div>
+      <div id="sp-smart" class="sp-pane active"></div>
+    </div>
+  </div>
+
+  <div id="board-panels" class="board-panels"></div>
+  </div>
+
+  <div id="event-toasts" class="toasts"></div>
+
+  <div id="overlay" class="overlay hidden"></div>
+
+  <aside id="events-panel" class="drawer hidden" aria-label="События">
+    <div class="drawer-head">
+      <h2>🔔 События</h2>
+      <button class="icon-btn close-btn" data-close="events">✕</button>
+    </div>
+    <button id="btn-add-event" class="primary block">+ Новое событие</button>
+    <div id="events-list" class="events-list"></div>
+  </aside>
+
+  <aside id="ai-panel" class="ai-panel hidden" aria-label="ИИ-ассистент">
+    <div class="drawer-head">
+      <h2>🤖 Big Pickle <span class="model-tag" id="ai-model-tag"></span></h2>
+      <button class="icon-btn close-btn" data-close="ai">✕</button>
+    </div>
+    <div id="ai-messages" class="ai-messages"></div>
+    <div id="ai-trace" class="ai-trace"></div>
+    <div class="ai-inputbar">
+      <div id="ai-preview" class="ai-preview hidden"></div>
+      <div class="ai-controls">
+        <button id="btn-ai-photo" class="icon-btn" title="Прикрепить фото">🖼️</button>
+        <input type="file" id="ai-photo-input" accept="image/*" hidden>
+        <button id="btn-ai-mic" class="icon-btn" title="Голосовой ввод">🎙️</button>
+        <input id="ai-text" class="ai-text" type="text" placeholder="Спроси что-нибудь…" autocomplete="off">
+        <button id="btn-ai-send" class="icon-btn send" title="Отправить">➤</button>
+      </div>
+      <div id="ai-voice-status" class="ai-voice-status hidden">🎙️ Говорите…</div>
+    </div>
+  </aside>
+
+  <aside id="files-panel" class="drawer hidden" aria-label="Файлы">
+    <div class="drawer-head">
+      <h2>📁 Файлы на этом ПК</h2>
+      <button class="icon-btn close-btn" data-close="files">✕</button>
+    </div>
+    <div id="files-breadcrumb" class="files-crumb"></div>
+    <div id="files-list" class="files-list"></div>
+  </aside>
+
+  <button id="btn-ai-toggle" class="ai-toggle" title="ИИ-ассистент">🤖</button>
+
+  <div id="ai-resizer" title="Перетащите, чтобы сменить ширину"></div>
+
+  <div id="modal" class="modal hidden"></div>
+
+  <div id="palette" class="palette"></div>
+
+  <button id="btn-add-column" class="add-column">+ Колонка</button>
+
+  <div id="zoom-ctl" class="zoom-ctl">
+    <button class="icon-btn" data-zoom="out" title="Отдалить">−</button>
+    <button class="icon-btn" data-zoom="reset" title="Масштаб 100%">1:1</button>
+    <button class="icon-btn" data-zoom="in" title="Приблизить">+</button>
+    <span id="zoom-pct" class="zoom-pct">100%</span>
+  </div>
 
   <div id="notif-drawer" class="notif-drawer" aria-label="Уведомления">
     <div class="notif-drawer-head">
-      <h3>Уведомления</h3>
-      <button class="btn-ghost" id="notif-drawer-close">×</button>
+      <h3>🔔 Уведомления</h3>
+      <div style="display:flex;gap:6px"><button class="icon-btn" id="notif-drawer-sound" title="Настройка звуков">⚙</button><button class="icon-btn" id="notif-drawer-close" title="Закрыть">✕</button></div>
     </div>
     <div class="notif-drawer-list" id="notif-drawer-list"></div>
   </div>
   <audio id="notif-sound" preload="auto"></audio>
 
+  <script src="/js/app.js?v=3"></script>
+  <script src="/js/trace.js"></script>
+  <script src="/js/weather.js"></script>
+  <script src="/js/assistant.js"></script>
+  <script src="/js/assist.js"></script>
+  <script src="/js/notif.js"></script>
+  <script src="/js/wake.js"></script>
+  <script src="/js/files.js"></script>
+  <script src="/js/movies.js"></script>
+  <script src="/js/news.js"></script>
+  <script src="/js/gh.js"></script>
+  <script src="/js/music.js"></script>
+  <script src="/js/notify.js?v=3"></script>
+  <script src="/js/ops.js?v=2"></script>
+  <script src="/js/stats.js?v=1"></script>
+  <script src="/js/console.js"></script>
+  <script src="/js/sys.js"></script>
+  <script src="/js/tiles.js"></script>
+  <script src="/js/canvas.js?v=1"></script>
+  <script src="/js/youtube.js?v=2"></script>
+  <script src="/js/interests.js?v=1"></script>
+  <script src="/js/games.js?v=1"></script>
+  <script src="/js/msgs.js?v=1"></script>
+  <script src="/js/smart.js?v=1"></script>
+  <script src="/js/place.js?v=6"></script>
   <script src="/js/core/theme.js"></script>
-  <script src="/js/core/app.js"></script>
-  <script src="/js/core/nav.js"></script>
   <script src="/js/core/notify-sound.js"></script>
-  <script src="/js/core/smart-bridge.js"></script>
   <script src="/js/core/notif-drawer.js"></script>
   <script src="/js/core/card-drag.js"></script>
   <script src="/js/core/card-preview.js"></script>
   <script src="/js/core/card-collapse.js"></script>
-  <script src="/js/core/dashboard-loader.js"></script>
-  <script src="/js/components/kanban-ui.js"></script>
-  <script src="/js/widgets/movies-widget.js"></script>
-  <script src="/js/widgets/news-widget.js"></script>
-  <script src="/js/widgets/music-widget.js"></script>
-  <script src="/js/widgets/youtube-widget.js"></script>
-  <script src="/js/widgets/smart-widget.js"></script>
-  <script src="/js/widgets/notify-widget.js"></script>
-  <script src="/js/widgets/games-widget.js"></script>
-  <script src="/js/widgets/msgs-widget.js"></script>
-  <script src="/js/widgets/stats-widget.js"></script>
-  <script src="/js/widgets/interests-widget.js"></script>
-  <script src="/js/widgets/gh-widget.js"></script>
-  <script src="/js/widgets/console-widget.js"></script>
-  <script src="/js/widgets/files-widget.js"></script>
-  <script src="/js/widgets/ops-widget.js"></script>
-  <script src="/js/widgets/assist-widget.js"></script>
   <script src="/js/components/sounds-ui.js"></script>
-  <script src="/js/movies.js"></script>
-  <script src="/js/news.js"></script>
-  <script src="/js/music.js"></script>
-  <script src="/js/youtube.js"></script>
-  <script src="/js/smart.js"></script>
-  <script src="/js/notify.js"></script>
-  <script src="/js/games.js"></script>
-  <script src="/js/msgs.js"></script>
-  <script src="/js/stats.js"></script>
-  <script src="/js/interests.js"></script>
-  <script src="/js/gh.js"></script>
-  <script src="/js/console.js"></script>
-  <script src="/js/files.js"></script>
-  <script src="/js/ops.js"></script>
-  <script src="/js/assist.js"></script>
-  <script src="/js/assistant.js"></script>
 </body>
 </html>

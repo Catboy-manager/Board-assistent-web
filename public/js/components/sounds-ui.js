@@ -1,6 +1,6 @@
 (function () {
-  async function load() {
-    const root = document.getElementById('w-sounds');
+  async function load(target) {
+    const root = target || document.getElementById('w-sounds');
     if (!root) return;
     root.innerHTML = `
       <div class="card-glass" style="min-height:auto">
@@ -91,5 +91,13 @@
     };
   }
   function escapeHtml(s){return String(s).replace(/[&<>"']/g,m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]));}
-  document.addEventListener('DOMContentLoaded', load);
+  document.addEventListener('DOMContentLoaded', () => {
+    const gear = document.getElementById('notif-drawer-sound');
+    if (gear) gear.onclick = () => {
+      const list = document.getElementById('notif-drawer-list');
+      if (list) load(list);
+    };
+    if (document.getElementById('w-sounds')) load();
+  });
+  window.SOUNDS_UI = { load };
 })();
