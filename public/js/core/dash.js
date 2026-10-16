@@ -83,7 +83,7 @@
       ['MOVIES', 'load'], ['NEWSBTN', 'load'], ['MUSIC', 'load'],
       ['YT', 'load'], ['SMART', 'load'], ['GAMES', 'load'],
       ['MSGS', 'load'], ['STATS', 'load'], ['INT', 'load'],
-      ['GHBTN', 'load'], ['CONS', 'load'], ['OPS', 'load'],
+      ['GHBTN', 'load'], ['OPS', 'load'],
       ['NOTIFY', 'loadHistory']
     ];
     calls.forEach(([ns, fn]) => {

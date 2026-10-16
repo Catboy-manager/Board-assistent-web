@@ -723,6 +723,13 @@ module.exports = (deps) => {
         return true;
       });
     }
+    if (req.method === 'GET' && p === '/api/interests/import/status') {
+      const id = String(url.searchParams.get('job') || '');
+      const since = Math.max(0, parseInt(url.searchParams.get('since') || '0', 10) || 0);
+      const job = importJobs.get(id);
+      if (!job) return json(res, 200, { ok: false, done: true, error: 'Задача не найдена', events: [], next: since });
+      return json(res, 200, { ok: true, done: !!job.done, next: job.events.length, events: job.events.slice(since), result: job.result });
+    }
     if (req.method === 'GET' && p === '/api/interests/import/events') {
       const id = String(url.searchParams.get('job') || '');
       const job = importJobs.get(id);

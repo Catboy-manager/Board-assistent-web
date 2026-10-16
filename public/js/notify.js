@@ -28,6 +28,7 @@
   }
 
   let rendered = false;
+  let replayTimer = null;
 
   /* Приватность: банковские SMS и платёжные уведомления не показываем */
   const PRIVACY_APP_RE = /сбер|тиньк|tinkoff|втб|альфа|alfa|райф|совком|газпром|открытие|сбп|юмани|yoomoney|киви|qiwi|банк|bank|вклад|депозит|хоум|кредитн|мобил\w{0,4}\s*банк/i;
@@ -89,7 +90,10 @@
         if (d.type !== 'phone' || !d.item) return;
         const it = d.item;
         if (isPrivate(it)) return;
-        if (d.replay) { pushLive(it); return; }
+        if (d.replay) {
+          if (!replayTimer) replayTimer = setTimeout(() => { replayTimer = null; loadHistory(); }, 150);
+          return;
+        }
         const title = '🔔 ' + (it.app || 'Телефон') + (it.title ? ': ' + it.title : '');
         toast(title, it.text || '');
         notify(title, it.text || '');

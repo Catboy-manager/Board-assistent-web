@@ -82,13 +82,16 @@
       t.onclick = () => switchTab(t.dataset.st);
     });
     load();
-    if (!window.EventSource) return;
-    const es = new EventSource('/api/ops/events');
-    es.onmessage = (ev) => {
-      let d; try { d = JSON.parse(ev.data); } catch (e) { return; }
-      if (d.type === 'res' && d.item) { last = d.item; render(); }
-    };
-    es.onerror = () => {};
+    if (window.OPS && typeof window.OPS.subscribe === 'function') {
+      window.OPS.subscribe(d => { if (d.type === 'res' && d.item) { last = d.item; render(); } });
+    } else if (window.EventSource) {
+      const es = new EventSource('/api/ops/events');
+      es.onmessage = (ev) => {
+        let d; try { d = JSON.parse(ev.data); } catch (e) { return; }
+        if (d.type === 'res' && d.item) { last = d.item; render(); }
+      };
+      es.onerror = () => {};
+    }
     setInterval(load, 30000);
   }
 

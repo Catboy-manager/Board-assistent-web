@@ -19,10 +19,9 @@
     const tagsEl = $('cookies-tags');
     const portraitEl = $('cookies-portrait');
     let text = '';
-    let es = null;
-    let guardTimer = null;
-    let fallbackTimer = null;
-    let receivedAny = false;
+    let pollTimer = null;
+    let pollSince = 0;
+    let pollTicks = 0;
 
     function esc(s) {
       return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -101,16 +100,10 @@
     }
 
     function stopStream() {
-      if (guardTimer) { clearTimeout(guardTimer); guardTimer = null; }
-      if (fallbackTimer) { clearTimeout(fallbackTimer); fallbackTimer = null; }
-      if (es) { try { es.close(); } catch (e) {} es = null; }
+      if (pollTimer) { clearTimeout(pollTimer); pollTimer = null; }
     }
 
     function handleEvent(ev) {
-      if (!receivedAny) {
-        receivedAny = true;
-        if (fallbackTimer) { clearTimeout(fallbackTimer); fallbackTimer = null; }
-      }
       switch (ev.stage) {
         case 'start':
         case 'file':
@@ -197,7 +190,6 @@
       resetUi();
       status.textContent = 'Импортирую…';
       stopStream();
-      receivedAny = false;
       let jobId = '';
       try {
         const r = await fetch('/api/interests/import', {
@@ -212,26 +204,40 @@
         status.textContent = 'Сервер недоступен: ' + String(e.message || e);
         return;
       }
-      es = new EventSource('/api/interests/import/events?job=' + encodeURIComponent(jobId));
-      es.onmessage = e => { try { handleEvent(JSON.parse(e.data)); } catch (err) {} };
-      es.onerror = () => {
-        if (es && es.readyState === EventSource.CLOSED) {
-          stopStream();
-          setProgress(100, 'Соединение закрыто');
-          reloadInterests();
-        }
-      };
-      fallbackTimer = setTimeout(() => {
-        if (!receivedAny) { log('SSE недоступен — перехожу к прямому обновлению…', 'err'); fallbackRebuild(payload); }
-      }, 8000);
-      guardTimer = setTimeout(() => {
-        if (es && es.readyState !== EventSource.CLOSED) {
-          stopStream();
-          status.textContent = 'Импорт идёт дольше обычного — результат обновится позже.';
-          reloadInterests();
-          if (window.INT && window.INT.load) window.INT.load();
-        }
-      }, 90000);
+      pollSince = 0;
+      pollTicks = 0;
+      log('Отслеживаю прогресс импорта…');
+      pollStep(jobId);
+    }
+
+    async function pollStep(jobId) {
+      let d = null;
+      try {
+        const r = await fetch('/api/interests/import/status?job=' + encodeURIComponent(jobId) + '&since=' + pollSince);
+        d = await r.json();
+      } catch (e) {
+        d = null;
+      }
+      if (d && Array.isArray(d.events)) {
+        for (const ev of d.events) { try { handleEvent(ev); } catch (e) {} }
+        pollSince = (typeof d.next === 'number') ? d.next : pollSince + d.events.length;
+      }
+      if (d && d.done) { stopStream(); return; }
+      if (d && d.ok === false) {
+        stopStream();
+        log('Задача импорта не найдена — обновляю напрямую…', 'err');
+        fallbackRebuild({});
+        return;
+      }
+      pollTicks++;
+      if (pollTicks < 600) {
+        pollTimer = setTimeout(() => pollStep(jobId), 500);
+      } else {
+        stopStream();
+        status.textContent = 'Импорт идёт дольше обычного — результат обновится позже.';
+        reloadInterests();
+        if (window.INT && window.INT.load) window.INT.load();
+      }
     }
 
     if (fromBrowser) fromBrowser.addEventListener('click', () => {

@@ -5,6 +5,7 @@
   const esc = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   const ICON_HEX = /^[0-9a-f]{4,6}$/i;
   let items = [];
+  const subs = new Set();
 
   function fmtTs(ts) {
     const d = new Date(ts);
@@ -100,6 +101,7 @@
     const es = new EventSource('/api/ops/events');
     es.onmessage = (ev) => {
       let d; try { d = JSON.parse(ev.data); } catch (e) { return; }
+      for (const fn of subs) { try { fn(d); } catch (e) {} }
       if (d.type === 'op' && d.item) {
         if (d.replay) {
           if (!replayPending) { replayPending = true; setTimeout(() => { replayPending = false; load(); }, 60); }
@@ -113,6 +115,6 @@
     es.onerror = () => {};
   }
 
-  window.OPS = { load };
+  window.OPS = { load, subscribe(fn) { subs.add(fn); return () => subs.delete(fn); } };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', initOps); else initOps();
 })();
