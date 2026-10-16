@@ -33,11 +33,61 @@ module.exports = (deps) => {
     { key: 'education', label: 'Учёба и развитие', icon: '🎓', words: ['лекци', 'урок', 'обучени', 'учебн', 'мастер-класс', 'мастеркласс', 'туториал', 'tutorial', 'школ', 'университет', 'универ', 'институт', 'курс', 'знани', 'литератур', 'истори', 'учител', 'преподавател', 'саморазвит', 'егэ', 'школьн', 'как'] },
     { key: 'cooking', label: 'Кулинария', icon: '🍳', words: ['рецепт', 'готов', 'кухн', 'кулинар', 'блюд', 'завтрак', 'ужин', 'обед', 'выпечк', 'торт', 'суп', 'салат', 'рецепты', 'food', 'recipe', 'cooking', 'шеф-повар'] }
   ];
-  const INTEREST_STOP = new Set(['этот','этого','это','такое','которые','который','которых','которые','как','все','еще','ещё','только','будет','может','также','очень','свою','свой','своих','люди','человек','год','года','годы','уже','был','была','были','and','the','for','with','from','that','this','have','will','what','how','when','why','not','are','you','your','can','channel','subscribe','really','great','video','top','best','versus','vs','official','new','live','talk']);
+  const INTEREST_STOP = new Set(['этот','этого','это','такое','которые','который','которых','которые','как','все','еще','ещё','только','будет','может','также','очень','свою','свой','своих','люди','человек','год','года','годы','уже','был','была','были','and','the','for','with','from','that','this','have','will','what','how','when','why','not','are','you','your','can','channel','subscribe','really','great','video','top','best','versus','vs','official','new','live','talk','cookies','cookie','поиск','канал','подборка','смотреть','обзор']);
+
+  /* Дополнительные темы, которые автоматически находят себя в запросах,
+     cookie-сигналах и названиях просмотров. Используются для авто-тем. */
+  const EXTRA_THEMES = [
+    { key: 'travel', label: 'Путешествия', icon: '✈️', words: ['путешеств', 'travel', 'туризм', 'отель', 'hotel', 'авиа', 'booking', 'airbnb', 'отдых', 'курорт', 'виза', 'поездк', 'стран'] },
+    { key: 'auto', label: 'Авто', icon: '🚗', words: ['авто', 'машин', 'автомоб', 'car', 'tesla', 'bmw', 'mercedes', 'audi', 'toyota', 'двигател', 'шины', 'автосалон', 'drom', 'тест-драйв'] },
+    { key: 'health', label: 'Здоровье', icon: '🩺', words: ['здоров', 'health', 'врач', 'болезн', 'иммунитет', 'фитнес', 'fitness', 'тренировк', 'спортзал', 'диет', 'похуд', 'витамин', 'сон'] },
+    { key: 'fashion', label: 'Мода и стиль', icon: '👗', words: ['мод', 'fashion', 'стил', 'одежд', 'бренд', 'sneaker', 'dress', 'одеван', 'shopping', 'кроссовк'] },
+    { key: 'humor', label: 'Юмор', icon: '😂', words: ['юмор', 'смешн', 'прикол', 'мем', 'meme', 'funny', 'comedy', 'стендап', 'standup', 'шутк', 'ржач'] },
+    { key: 'psy', label: 'Психология', icon: '🧩', words: ['психолог', 'psy', 'mindfulness', 'медитац', 'мотивац', 'продуктивн', 'привычк', 'эмоци', 'осознан', 'мышлени'] },
+    { key: 'art', label: 'Искусство и дизайн', icon: '🎨', words: ['искусств', 'арт', 'design', 'дизайн', 'рисун', 'фото', 'photography', 'архитектур', 'живопис', 'творчеств'] },
+    { key: 'pets', label: 'Животные', icon: '🐾', words: ['питом', 'собак', 'кошк', 'животн', 'pet', 'dog', 'cat', 'зоо', 'ветеринар'] }
+  ];
+
+  /* Архетипы «портрета» по доминирующей категории. */
+  const ARCHETYPES = {
+    tech: { title: 'Инженер-энтузиаст', icon: '🤖' },
+    science: { title: 'Пытливый исследователь', icon: '🔬' },
+    space: { title: 'Мечтатель о космосе', icon: '🌌' },
+    music: { title: 'Меломан', icon: '🎧' },
+    games: { title: 'Геймер', icon: '🕹' },
+    cinema: { title: 'Киноман', icon: '🍿' },
+    sport: { title: 'Спортсмен-болельщик', icon: '🏅' },
+    business: { title: 'Деловой человек', icon: '📈' },
+    education: { title: 'Вечный студент', icon: '📚' },
+    cooking: { title: 'Гурман-кулинар', icon: '👨‍🍳' },
+    travel: { title: 'Путешественник', icon: '🧭' },
+    auto: { title: 'Автолюбитель', icon: '🏁' },
+    health: { title: 'ЗОЖ-энтузиаст', icon: '💪' },
+    fashion: { title: 'Эстет', icon: '✨' },
+    humor: { title: 'Душа компании', icon: '😄' },
+    psy: { title: 'Мыслитель', icon: '🧠' },
+    art: { title: 'Творец', icon: '🖌' },
+    pets: { title: 'Зоолюб', icon: '🐾' }
+  };
+
+  const QUERIES_FILE = path.join(dataDir, 'yt-queries.json');
+  const THEMES_FILE = path.join(dataDir, 'yt-themes.json');
 
   let watch = [];
   try { const d = JSON.parse(fs.readFileSync(WATCH_FILE, 'utf8')); watch = (d && d.watch) || []; } catch (e) {}
   function saveWatch() { try { fs.writeFileSync(WATCH_FILE, JSON.stringify({ watch }, null, 2)); } catch (e) {} }
+
+  let queries = [];
+  try { const d = JSON.parse(fs.readFileSync(QUERIES_FILE, 'utf8')); queries = (d && d.queries) || []; } catch (e) {}
+  function saveQueries() { try { fs.writeFileSync(QUERIES_FILE, JSON.stringify({ queries }, null, 2)); } catch (e) {} }
+  function addQuery(q) {
+    q = String(q || '').trim().slice(0, 120);
+    if (q.length < 2) return;
+    queries = queries.filter(x => x.q !== q);
+    queries.unshift({ q, ts: Date.now() });
+    if (queries.length > 300) queries = queries.slice(0, 300);
+    saveQueries();
+  }
   const YTDLP = process.env.KANBAN_YTDLP || 'yt-dlp';
   const RESOLVE_TIMEOUT = 45000;
   const COOKIES_MAX = 2 * 1024 * 1024;
@@ -47,6 +97,89 @@ module.exports = (deps) => {
   try { const d = JSON.parse(fs.readFileSync(AUTH_FILE, 'utf8')); auth = Object.assign(auth, d); } catch (e) {}
   function saveAuth() { try { fs.writeFileSync(AUTH_FILE, JSON.stringify(auth, null, 2)); } catch (e) {} }
   function cookiesExist() { try { return fs.existsSync(COOKIES_FILE) && fs.statSync(COOKIES_FILE).size > 0; } catch (e) { return false; } }
+
+  /* Ищет файлы cookies популярных браузеров (обычные и snap/flatpak). */
+  function browserCookieDbs(browser) {
+    const home = require('os').homedir();
+    const out = [];
+    const push = (p) => { try { if (fs.existsSync(p)) out.push(p); } catch (e) {} };
+    const chromeProfiles = ['Default', 'Profile 1', 'Profile 2', 'Profile 3'];
+    const chromeRoots = [
+      path.join(home, '.config/google-chrome'),
+      path.join(home, '.config/chromium'),
+      path.join(home, 'snap/chromium/common/chromium'),
+      path.join(home, '.var/app/org.chromium.Chromium/config/chromium')
+    ];
+    const firefoxRoots = [
+      path.join(home, '.mozilla/firefox'),
+      path.join(home, 'snap/firefox/common/.mozilla/firefox'),
+      path.join(home, '.var/app/org.mozilla.firefox/.mozilla/firefox')
+    ];
+    const wantChrome = !browser || browser === 'chrome';
+    const wantFirefox = !browser || browser === 'firefox';
+    if (wantChrome) {
+      for (const root of chromeRoots) for (const prof of chromeProfiles) push(path.join(root, prof, 'Cookies'));
+    }
+    if (wantFirefox) {
+      for (const root of firefoxRoots) {
+        try {
+          for (const d of fs.readdirSync(root)) {
+            if (/\.default/.test(d) || /\.default-release/.test(d)) push(path.join(root, d, 'cookies.sqlite'));
+          }
+        } catch (e) {}
+      }
+    }
+    return out;
+  }
+
+  /* Читает cookies из одной БД браузера (скопировав файл, чтобы не мешать блокировке).
+     Возвращает { rows: ["Domain=host\tname\thost", …] }. */
+  function readOneCookieDb(db) {
+    let Database;
+    try { Database = require('node:sqlite').DatabaseSync; } catch (e) { return { rows: [], error: 'no sqlite' }; }
+    let tmp = null;
+    try {
+      tmp = db + '.kanban.tmp';
+      fs.copyFileSync(db, tmp);
+      const d = new Database(tmp, { readOnly: true });
+      let raw = [];
+      try {
+        raw = d.prepare('SELECT host_key AS host, name FROM cookies').all();
+      } catch (e) {
+        try { raw = d.prepare('SELECT host AS host, name FROM moz_cookies').all(); } catch (e2) { raw = []; }
+      }
+      try { d.close(); } catch (e) {}
+      const rows = raw.filter(r => r && r.host).map(r => 'Domain=' + String(r.host).replace(/^\./, '') + '\t' + (r.name || '') + '\t' + (r.host || ''));
+      return { rows };
+    } catch (e) {
+      return { rows: [], error: String((e && e.message) || e) };
+    } finally {
+      try { if (tmp) fs.unlinkSync(tmp); } catch (e) {}
+    }
+  }
+
+  /* Короткое человекочитаемое имя базы: «Профиль/файл». */
+  function prettyDb(db) {
+    const parts = String(db).split(path.sep);
+    return parts.slice(-2).join('/');
+  }
+
+  /* Читает cookies из БД браузера. Возвращает строку "Domain=host\tname" для анализа. */
+  function extractBrowserCookies(browser) {
+    const dbs = browserCookieDbs(browser);
+    if (!dbs.length) return { ok: false, error: 'no browser cookie db found' };
+    const lines = [];
+    let used = '';
+    const details = [];
+    for (const db of dbs) {
+      const r = readOneCookieDb(db);
+      details.push({ db, count: r.rows.length });
+      if (r.rows.length) { lines.push(...r.rows); used = db; }
+    }
+    if (!lines.length) return { ok: false, error: 'no cookies read' };
+    return { ok: true, text: lines.join('\n'), count: lines.length, browser: used, details, dbs };
+  }
+
 
   /* аргументы авторизации для yt-dlp: cookies.txt важнее браузерного профиля */
   function authArgs() {
@@ -141,6 +274,78 @@ module.exports = (deps) => {
   /* ---------- карта интересов ---------- */
   function matchesWord(text, w) { return String(text).toLowerCase().includes(String(w).toLowerCase()); }
 
+  /* Сигналы-слова из cookie-строки, с привязкой к категории (для лога тегов). */
+  function cookieSignals(txt) {
+    const t = String(txt || '').toLowerCase();
+    const found = new Set();
+    const add = (re, words) => { if (re.test(t)) words.forEach(w => found.add(w)); };
+    add(/(tech|linux|dev|code|program|github|stackoverflow|habr|nvidia|amd|intel|python|javascript|typescript|docker|kubernetes|openai|нейросет|искусственн|программ|технолог)/, ['технолог', 'программ', 'нейросет', 'github']);
+    add(/(youtube|youtu\.be|video|watch|музык|песн|music|spotify|soundcloud)/, ['музык', 'video', 'плейлист']);
+    add(/(netflix|kinopoisk|imdb|movie|film|cinema|сериал|кино|фильм)/, ['фильм', 'сериал', 'кино']);
+    add(/(steam|epicgames|gog|game|игр|гейм|twitch|киберспорт)/, ['игр', 'game', 'steam']);
+    add(/(science|arxiv|nasa|space|physics|nature\.com|наука|косм|spacex)/, ['наук', 'косм', 'физик']);
+    add(/(cook|recipe|food|кулин|рецепт|eda|delivery)/, ['кулин', 'рецепт']);
+    add(/(sport|football|soccer|nba|nfl|спорт|футбол)/, ['спорт', 'футбол']);
+    add(/(coursera|edx|udemy|learn|курс|education|stepik|учё|учеб)/, ['курс', 'учё', 'образован']);
+    add(/(amazon|ozon|wildberries|shop|market|покуп|маркет|alibaba|aliexpress)/, ['покуп', 'маркет']);
+    add(/(crypto|bitcoin|binance|finance|bank|трейд|крипт|финанс|инвест)/, ['крипт', 'финанс', 'инвест']);
+    add(/(travel|trip|hotel|booking|airbnb|avia|авиа|отель|туризм|путешеств)/, ['путешеств', 'отель', 'авиа']);
+    add(/(auto|car|drive|tesla|bmw|toyota|drom|avito|авто|машин)/, ['авто', 'машин', 'двигател']);
+    add(/(health|doctor|fitness|gym|витамин|здоров|фитнес|тренировк)/, ['здоров', 'фитнес', 'тренировк']);
+    const allCats = INTEREST_CATS.concat(EXTRA_THEMES);
+    return Array.from(found).slice(0, 40).map(w => {
+      let cat = null;
+      for (const c of allCats) if (c.words.some(x => w.includes(String(x).toLowerCase()) || String(x).toLowerCase().includes(w))) { cat = c; break; }
+      return { word: w, key: cat ? cat.key : null, label: cat ? cat.label : 'Прочее', icon: cat ? cat.icon : '✨' };
+    });
+  }
+
+  /* Авто-темы: находятся в запросах и просмотрах, если сигналов ≥ 2. */
+  function deriveThemes() {
+    const counts = {};
+    EXTRA_THEMES.forEach(t => counts[t.key] = 0);
+    const src = watch.map(s => ({ title: s.title || '', channel: s.channel || '' }))
+      .concat(queries.map(q => ({ title: q.q || '', channel: 'поиск' })));
+    for (const s of src) {
+      const text = (s.title + ' ' + s.channel).toLowerCase();
+      for (const t of EXTRA_THEMES) if (t.words.some(w => text.includes(w))) counts[t.key]++;
+    }
+    const out = EXTRA_THEMES.filter(t => counts[t.key] >= 2)
+      .map(t => ({ key: t.key, label: t.label, icon: t.icon, count: counts[t.key], weight: 0, auto: true, words: t.words.slice(0, 5) }));
+    const max = Math.max(1, ...out.map(o => o.count));
+    out.forEach(o => o.weight = Math.round((o.count / max) * 100));
+    out.sort((a, b) => b.count - a.count);
+    return out;
+  }
+
+  /* «Портрет человека»: архетип + текстовое описание на основе карты интересов. */
+  function buildPortrait(cats, top, themes) {
+    const alive = cats.filter(c => c.count > 0);
+    const all = alive.concat(themes.map(t => ({ key: t.key, label: t.label, icon: t.icon, count: t.count, weight: t.weight })));
+    all.sort((a, b) => b.count - a.count);
+    if (!all.length) {
+      return { title: 'Новый пользователь', icon: '🌱', summary: 'Данных пока мало — посмотрите несколько видео или импортируйте cookies, и я соберу ваш портрет.', traits: [], keywords: [], generatedAt: new Date().toISOString() };
+    }
+    const top3 = all.slice(0, 3);
+    const arch = ARCHETYPES[top3[0].key] || { title: 'Разносторонний человек', icon: '🧭' };
+    const kws = top.slice(0, 6).map(t => t.w);
+    const themeNames = themes.slice(0, 3).map(t => t.label);
+    const parts = [];
+    parts.push('Сильнее всего вас притягивают ' + top3.map(c => c.label + ' (' + c.count + ')').join(', ') + '.');
+    if (kws.length) parts.push('Часто в фокусе: ' + kws.map(k => '«' + k + '»').join(', ') + '.');
+    if (themeNames.length) parts.push('Авто-темы: ' + themeNames.join(', ') + '.');
+    parts.push('Всего учтено ' + alive.reduce((s, c) => s + c.count, 0) + ' интересов в ' + all.length + ' темах.');
+    return {
+      title: arch.title,
+      icon: arch.icon,
+      summary: parts.join(' '),
+      traits: all.slice(0, 8).map(c => ({ key: c.key, label: c.label, icon: c.icon, weight: c.weight, count: c.count })),
+      keywords: kws,
+      themesCount: themes.length,
+      generatedAt: new Date().toISOString()
+    };
+  }
+
   function buildInterests() {
     const counts = {};
     INTEREST_CATS.forEach(c => counts[c.key] = 0);
@@ -170,13 +375,19 @@ module.exports = (deps) => {
       .slice(0, 24);
     const recent = watch
       .filter(s => { const d = Number(s.dur) || 0; const w = Number(s.watchedSec) || 0; return d <= 0 || w >= d * 0.5; })
+      .filter(s => s.source !== 'cookies')
       .slice(0, 12)
       .map(s => ({ title: s.title, channel: s.channel, dur: s.dur, ts: s.ts }));
+    const themes = deriveThemes();
+    const portrait = buildPortrait(cats, top, themes);
     return {
       total,
       totalMin: Math.round(totalTime / 60),
+      queries: queries.length,
       generatedAt: new Date().toISOString(),
       cats,
+      themes,
+      portrait,
       top,
       recent
     };
@@ -197,6 +408,7 @@ module.exports = (deps) => {
       const q = String(url.searchParams.get('q') || '').trim();
       const n = Math.max(1, Math.min(20, parseInt(url.searchParams.get('n') || '8', 10)));
       if (!q) return json(res, 400, { error: 'need q' });
+      addQuery(q);
       try {
         const info = await ytdlpRetry(['--flat-playlist', '-J', 'ytsearch' + n + ':' + q], { timeout: 30000 });
         const items = (info.entries || []).map(en => ({
@@ -285,6 +497,20 @@ module.exports = (deps) => {
 
     if (req.method === 'POST' && p === '/api/yt/auth/cookies') {
       const buf = await readBody(req);
+      const raw = buf ? buf.toString('utf8') : '';
+      /* JSON-запрос {source:'browser'} — тянем cookies прямо из браузера на этом ПК. */
+      if (/^\s*\{/.test(raw)) {
+        let body = {};
+        try { body = JSON.parse(raw); } catch (e) {}
+        if (body && body.source === 'browser') {
+          const ex = extractBrowserCookies(String(body.browser || '') || null);
+          if (!ex.ok) return json(res, 404, { error: ex.error || 'browser cookies not found' });
+          try { fs.writeFileSync(COOKIES_FILE, ex.text, { flag: 'w' }); } catch (e) { return json(res, 500, { error: 'write failed' }); }
+          auth.browser = String(body.browser || '') || auth.browser || 'chrome';
+          saveAuth();
+          return json(res, 200, { ok: true, size: Buffer.byteLength(ex.text), count: ex.count, browser: auth.browser });
+        }
+      }
       if (!buf || !buf.length) return json(res, 400, { error: 'empty body' });
       if (buf.length > COOKIES_MAX) return json(res, 413, { error: 'cookies too big' });
       try { fs.writeFileSync(COOKIES_FILE, buf, { flag: 'w' }); } catch (e) { return json(res, 500, { error: 'write failed' }); }
@@ -340,5 +566,197 @@ module.exports = (deps) => {
     return false;
   }
 
-  return { handle };
+  /* Применяет сигналы cookies в историю просмотров синтетическими записями
+     (source:'cookies'). Старые cookie-записи удаляются, чтобы повторный импорт
+     не раздувал счётчики. buildInterests() затем пересчитает карту. */
+  function applyCookieSignals(signals) {
+    watch = watch.filter(s => s.source !== 'cookies');
+    const now = Date.now();
+    signals.forEach((s, i) => {
+      watch.unshift({ title: s.word, channel: 'cookies', dur: 600, watchedSec: 600, ts: now + i, source: 'cookies', cat: s.key || null });
+    });
+    if (watch.length > 2000) watch = watch.slice(0, 2000);
+    saveWatch();
+    return signals.length;
+  }
+
+  /* Обновляет интересы из cookies. Возвращает детали импорта. */
+  function updateInterestsFromCookies(txt) {
+    const signals = cookieSignals(txt);
+    applyCookieSignals(signals);
+    return { updates: signals.length, signals };
+  }
+
+  /* ---------- импорт cookies с прогрессом (SSE) ---------- */
+  const importJobs = new Map();
+  const tick = ms => new Promise(r => setTimeout(r, ms || 0));
+
+  function jobEmit(job, obj) {
+    job.events.push(obj);
+    if (job.events.length > 800) job.events.splice(0, job.events.length - 400);
+    for (const c of job.clients) { try { c.write('data: ' + JSON.stringify(obj) + '\n\n'); } catch (e) { job.clients.delete(c); } }
+  }
+
+  /* Снимок ключевых чисел для проверки, что импорт реально что-то изменил. */
+  function snapshot() {
+    const i = buildInterests();
+    const cats = {};
+    i.cats.forEach(c => cats[c.key] = c.count);
+    return { total: i.total, cats };
+  }
+
+  async function runImportJob(job, opts) {
+    try {
+      jobEmit(job, { stage: 'start', pct: 3, message: 'Запускаю импорт cookies…' });
+      await tick(40);
+      let text = '', count = 0, usedBrowser = null, source = 'file';
+      if (opts && opts.text != null) {
+        text = String(opts.text);
+        jobEmit(job, { stage: 'file', pct: 8, message: 'Читаю загруженный cookies.txt (' + Math.round(text.length / 1024) + ' КБ)', count: 0 });
+        await tick(40);
+      } else {
+        const browser = String((opts && opts.browser) || '') || null;
+        const dbs = browserCookieDbs(browser);
+        source = browser || 'auto';
+        jobEmit(job, { stage: 'scan', pct: 5, message: 'Ищу базы cookies' + (browser ? ' (' + browser + ')' : '') + '… найдено: ' + dbs.length, files: dbs.map(prettyDb) });
+        await tick(60);
+        if (!dbs.length) { jobEmit(job, { stage: 'error', pct: 100, message: 'Базы cookies не найдены — браузер не установлен или профиль пуст' }); job.done = true; return; }
+        const lines = [];
+        for (let i = 0; i < dbs.length; i++) {
+          const db = dbs[i];
+          const base = 8 + Math.round((i / dbs.length) * 30);
+          jobEmit(job, { stage: 'read', pct: base, message: 'Читаю ' + prettyDb(db) + '…', file: prettyDb(db) });
+          await tick(50);
+          const r = readOneCookieDb(db);
+          if (r.rows.length) { lines.push(...r.rows); usedBrowser = db; }
+          jobEmit(job, { stage: 'read', pct: base + 3, message: '  → ' + prettyDb(db) + ': записей ' + r.rows.length, count: r.rows.length, file: prettyDb(db) });
+          await tick(40);
+        }
+        if (!lines.length) { jobEmit(job, { stage: 'error', pct: 100, message: 'Cookies не найдены ни в одной базе (браузер закрыт или профиль пуст)' }); job.done = true; return; }
+        text = lines.join('\n');
+        count = lines.length;
+        try {
+          fs.writeFileSync(COOKIES_FILE, text, { flag: 'w' });
+          auth.browser = String((opts && opts.browser) || '') || auth.browser || 'chrome';
+          saveAuth();
+        } catch (e) {}
+        jobEmit(job, { stage: 'read', pct: 40, message: 'Прочитано всего записей: ' + count + (usedBrowser ? ' (' + prettyDb(usedBrowser) + ')' : ''), count });
+      }
+
+      jobEmit(job, { stage: 'parse', pct: 45, message: 'Разбираю домены и сигналы…' });
+      await tick(60);
+      const signals = cookieSignals(text);
+      if (!signals.length) { jobEmit(job, { stage: 'error', pct: 100, message: 'Сигналов интересов в cookies не найдено' }); job.done = true; return; }
+      const domains = (text.match(/Domain=([^\s;]+)/gi) || []).length;
+
+      /* базовая линия — без прежних cookie-сигналов, чтобы замер отражал вклад именно этих cookies */
+      watch = watch.filter(s => s.source !== 'cookies');
+      const before = snapshot();
+      jobEmit(job, { stage: 'tags', pct: 48, message: 'Присваиваю теги интересов (' + signals.length + '):' });
+      await tick(60);
+
+      const now = Date.now();
+      const newTags = [];
+      for (let i = 0; i < signals.length; i++) {
+        const s = signals[i];
+        watch.unshift({ title: s.word, channel: 'cookies', dur: 600, watchedSec: 600, ts: now + i, source: 'cookies', cat: s.key || null });
+        if (!before.cats[s.key]) newTags.push(s.label);
+        const pct = 48 + Math.round(((i + 1) / signals.length) * 32);
+        jobEmit(job, { stage: 'tag', pct, message: s.icon + ' ' + s.label + ' ← #' + s.word, tag: s.word, label: s.label, icon: s.icon });
+        if (i % 2 === 0 || i === signals.length - 1) await tick(90);
+      }
+      if (watch.length > 2000) watch = watch.slice(0, 2000);
+      saveWatch();
+
+      jobEmit(job, { stage: 'apply', pct: 82, message: 'Пересчитываю карту интересов…' });
+      await tick(80);
+      const after = buildInterests();
+
+      /* проверка импорта */
+      const grown = [];
+      for (const c of after.cats) {
+        const b = before.cats[c.key] || 0;
+        if (c.count > b) grown.push({ key: c.key, label: c.label, icon: c.icon, delta: c.count - b });
+      }
+      const delta = after.total - before.total;
+      const imported = signals.length > 0;
+      const verify = {
+        imported,
+        beforeTotal: before.total,
+        afterTotal: after.total,
+        delta,
+        grown,
+        newTags: Array.from(new Set(newTags)),
+        message: imported
+          ? ('Импорт подтверждён: добавлено ' + signals.length + ' сигналов, ' + grown.length + ' тем выросло' + (grown.length ? ' (' + grown.map(g => g.icon + g.label).join(', ') + ')' : '') + '.')
+          : 'Импорт не дал новых сигналов.'
+      };
+      jobEmit(job, { stage: 'verify', pct: 90, message: verify.message, verify });
+
+      const themes = after.themes || [];
+      try { fs.writeFileSync(THEMES_FILE, JSON.stringify({ themes, generatedAt: new Date().toISOString() }, null, 2)); } catch (e) {}
+      if (themes.length) jobEmit(job, { stage: 'themes', pct: 94, message: 'Авто-темы (' + themes.length + '): ' + themes.map(t => t.icon + t.label).join(', '), themes });
+
+      jobEmit(job, { stage: 'portrait', pct: 97, message: 'Собираю ваш портрет…', portrait: after.portrait });
+      await tick(60);
+
+      job.result = { ok: true, source, count, domains, updates: signals.length, verify, themes, portrait: after.portrait, interests: after };
+      job.done = true;
+      jobEmit(job, { stage: 'done', pct: 100, message: 'Готово', result: job.result });
+    } catch (e) {
+      job.done = true;
+      jobEmit(job, { stage: 'error', pct: 100, message: 'Ошибка импорта: ' + String((e && e.message) || e) });
+    }
+  }
+
+  function interestsHandle(p, url, req, res) {
+    if (req.method === 'POST' && p === '/api/interests/import') {
+      return readBody(req).then(buf => {
+        let opts = {};
+        try { opts = JSON.parse((buf || '').toString() || '{}'); } catch (e) {}
+        const id = 'imp_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 8);
+        const job = { id, events: [], clients: new Set(), done: false, result: null };
+        importJobs.set(id, job);
+        setTimeout(() => { try { importJobs.delete(id); } catch (e) {} }, 10 * 60 * 1000);
+        runImportJob(job, opts);
+        json(res, 200, { ok: true, job: id });
+        return true;
+      });
+    }
+    if (req.method === 'GET' && p === '/api/interests/import/events') {
+      const id = String(url.searchParams.get('job') || '');
+      const job = importJobs.get(id);
+      res.writeHead(200, { 'Content-Type': 'text/event-stream; charset=utf-8', 'Cache-Control': 'no-cache', Connection: 'keep-alive' });
+      res.write(':ok\n\n');
+      if (!job) {
+        res.write('data: ' + JSON.stringify({ stage: 'error', pct: 100, message: 'Задача не найдена' }) + '\n\n');
+        res.end();
+        return true;
+      }
+      for (const ev of job.events) { try { res.write('data: ' + JSON.stringify(ev) + '\n\n'); } catch (e) {} }
+      if (job.done) { res.end(); return true; }
+      job.clients.add(res);
+      const timer = setInterval(() => { try { res.write(':k\n\n'); } catch (e) { clearInterval(timer); } }, 20000);
+      req.on('close', () => { clearInterval(timer); job.clients.delete(res); });
+      return true;
+    }
+    if (req.method === 'GET' && p === '/api/interests/portrait') {
+      return json(res, 200, buildInterests().portrait);
+    }
+    if (req.method === 'POST' && p === '/api/interests/rebuild-from-cookies') {
+      return readBody(req).then(buf => {
+        let text = (buf || '').toString('utf8');
+        if (!text.trim()) { try { if (fs.existsSync(COOKIES_FILE)) text = fs.readFileSync(COOKIES_FILE, 'utf8'); } catch (e) {} }
+        const domains = (text.match(/Domain=([^\s;]+)/gi) || []).length;
+        const r = updateInterestsFromCookies(text);
+        const interests = buildInterests();
+        json(res, 200, { ok: true, domains, updates: r.updates, themes: interests.themes, portrait: interests.portrait });
+        return true;
+      });
+    }
+    return false;
+  }
+
+  return { handle, updateInterestsFromCookies, extractBrowserCookies, cookieSignals, buildInterests, interestsHandle };
+
 };

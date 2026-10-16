@@ -66,6 +66,18 @@
       save();
     }
 
+    function setScale(s) {
+      st.s = clampS(s);
+      scrollTo((window.scrollX || 0) * (st.s / (clampS(1)*1)) * 0, 0);
+      apply();
+      save();
+    }
+
+    function scaleAtCenter(s) {
+      const cx = window.innerWidth / 2, cy = window.innerHeight / 2;
+      zoomAt(cx, cy, s / st.s);
+    }
+
     function visible() {
       const sc = scroll();
       return {
@@ -97,6 +109,8 @@
       view: function () { return { s: st.s, x: 0, y: 0 }; },
       zoomAt: zoomAt,
       reset: reset,
+      setScale: setScale,
+      scaleAtCenter: scaleAtCenter,
       scale: scale,
       toCanvas: toCanvas,
       visible: visible,

@@ -38,23 +38,40 @@
         <div class="int-bar-track"><div class="int-bar-fill" style="width:${c.weight}%"></div></div>
         <span class="int-bar-v">${c.count}</span>
       </div>`).join('');
+    const themes = (d.themes || []).filter(t => t.count > 0);
+    const themeBars = themes.map(c => `
+      <div class="int-bar" title="${c.label}: ${c.count}">
+        <span class="int-bar-ic">${c.icon}</span>
+        <span class="int-bar-name">${c.label} <span class="int-auto">авто</span></span>
+        <div class="int-bar-track"><div class="int-bar-fill" style="width:${c.weight}%"></div></div>
+        <span class="int-bar-v">${c.count}</span>
+      </div>`).join('');
     const chips = d.top.length ? d.top.map(t => `<span class="int-chip">${t.w}</span>`).join('') : '<span class="int-chip muted">нет слов</span>';
     const recent = d.recent.length ? d.recent.map(r => `
       <li class="int-rec">
         <span class="int-rec-t" title="${$esc(r.title)}">${$esc(r.title)}</span>
         <span class="int-rec-c">${$esc(r.channel)}</span>
       </li>`).join('') : '<li class="int-rec muted">недавних просмотров нет</li>';
+    const portraitHtml = d.portrait ? `
+      <div class="int-title">Портрет</div>
+      <div class="int-portrait">
+        <div class="int-portrait-head"><span class="int-portrait-ic">${d.portrait.icon || '🧑'}</span>
+          <span class="int-portrait-title">${$esc(d.portrait.title || '')}</span></div>
+        <div class="int-portrait-sum">${$esc(d.portrait.summary || '')}</div>
+      </div>` : '';
 
     pane.innerHTML = `
       <div class="int-actions">
-        <span class="int-sum">${d.total} видео · просмотрено ${d.totalMin} мин</span>
+        <span class="int-sum">${d.total} записей · ${d.totalMin} мин${d.queries ? ' · ' + d.queries + ' запросов' : ''}</span>
         <button class="icon-btn int-refresh" title="Обновить">⟳</button>
         <button class="icon-btn int-clear" title="Очистить историю просмотров">🗑</button>
       </div>
+      ${portraitHtml}
       <div class="int-title">Вектор интересов</div>
       ${radar}
       <div class="int-title">Категории</div>
       <div class="int-bars">${bars || '<div class="int-empty">Интересы пока не выделились — посмотрите ещё пару роликов.</div>'}</div>
+      ${themes.length ? '<div class="int-title">Авто-темы</div><div class="int-bars">' + themeBars + '</div>' : ''}
       <div class="int-title">Частые слова</div>
       <div class="int-chips">${chips}</div>
       <div class="int-title">Недавние просмотры</div>

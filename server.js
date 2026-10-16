@@ -1119,6 +1119,7 @@ async function handleRequest(req, res) {
       if (p.startsWith('/api/msgs')) { if (await messages.handle(p, url, req, res)) return; }
       if (p.startsWith('/api/gh')) { if (await gh.handle(p, url, req, res)) return; }
       if (p.startsWith('/api/yt')) { if (await youtube.handle(p, url, req, res)) return; }
+      if (p.startsWith('/api/interests')) { if (await youtube.interestsHandle(p, url, req, res)) return; }
       if (p.startsWith('/api/smart')) { if (await smart.handle(p, url, req, res)) return; }
       if (p.startsWith('/api/console')) { if (await consoleMod.handle(p, url, req, res)) return; }
       if (req.method === 'GET' && p === '/api/ping') return json(res, 200, { ok: true });

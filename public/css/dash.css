@@ -1,0 +1,388 @@
+/* ============================================================
+   NeuroBoard — дашборд в неоново-розовой мягкой гамме
+   Загружается последним, перекрывает style.css.
+   Доска (#world) — отдельное представление (data-view="board").
+   ============================================================ */
+
+:root {
+  --nb-pink: #ff6fb5;
+  --nb-pink-2: #ff9ecb;
+  --nb-violet: #a879ff;
+  --nb-cyan: #7fe3ff;
+  --nb-pink-soft: rgba(255, 111, 181, 0.14);
+  --nb-pink-line: rgba(255, 111, 181, 0.42);
+  --nb-radius: 18px;
+}
+
+/* --- Тёмная тема: неон на розовом --- */
+:root[data-theme="dark"] {
+  --accent: var(--nb-pink);
+  --accent-2: var(--nb-violet);
+  --border: rgba(255, 150, 205, 0.14);
+  --panel: rgba(34, 22, 42, 0.72);
+  --panel-2: rgba(44, 28, 54, 0.82);
+  --panel-border: rgba(255, 140, 200, 0.22);
+  --bg-gradient:
+    radial-gradient(1200px 780px at 12% -12%, rgba(255, 111, 181, 0.22), transparent 60%),
+    radial-gradient(1000px 720px at 96% -6%, rgba(168, 121, 255, 0.20), transparent 62%),
+    radial-gradient(900px 700px at 50% 120%, rgba(127, 227, 255, 0.10), transparent 60%),
+    linear-gradient(160deg, #1a1020 0%, #150e22 46%, #0c0a16 100%);
+  --shadow: 0 16px 48px rgba(20, 6, 24, 0.55);
+}
+
+/* --- Светлая тема: мягкий розовый --- */
+:root[data-theme="light"] {
+  --accent: #e0559b;
+  --accent-2: #8a5cf0;
+  --border: rgba(200, 120, 170, 0.20);
+  --panel: rgba(255, 255, 255, 0.80);
+  --panel-2: rgba(255, 245, 250, 0.92);
+  --panel-border: rgba(224, 85, 155, 0.22);
+  --bg-gradient:
+    radial-gradient(1100px 720px at 10% -12%, rgba(255, 161, 205, 0.35), transparent 62%),
+    radial-gradient(950px 680px at 95% -8%, rgba(196, 165, 255, 0.30), transparent 62%),
+    linear-gradient(160deg, #fff5fa 0%, #f7f0ff 50%, #eef3ff 100%);
+  --shadow: 0 16px 44px rgba(200, 140, 180, 0.25);
+}
+
+html, body { background: var(--bg-gradient); }
+
+/* ============================================================
+   Переключение представлений
+   ============================================================ */
+body[data-view="board"] #dash-view { display: none !important; }
+body[data-view="dash"] #world,
+body[data-view="dash"] #btn-add-column,
+body[data-view="dash"] #zoom-ctl { display: none !important; }
+
+/* Вид «Cookies → Интересы» */
+#cookies-view { display: none; }
+body[data-view="cookies"] #cookies-view { display: block !important; }
+body[data-view="cookies"] #dash-view,
+body[data-view="cookies"] #world,
+body[data-view="cookies"] #btn-add-column,
+body[data-view="cookies"] #zoom-ctl { display: none !important; }
+body:not([data-view="cookies"]) #cookies-view { display: none !important; }
+
+/* ============================================================
+   Переключатель вида в топбаре
+   ============================================================ */
+#view-switch {
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  border-radius: 12px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  flex: none;
+}
+.vs-btn {
+  padding: 6px 12px;
+  border-radius: 9px;
+  font-size: 13px;
+  color: var(--muted);
+  white-space: nowrap;
+  transition: background .15s, color .15s;
+}
+.vs-btn:hover { color: var(--text); }
+.vs-btn.active {
+  background: linear-gradient(135deg, var(--nb-pink), var(--nb-violet));
+  color: #1a0f1c;
+  font-weight: 600;
+}
+@media (max-width: 760px) {
+  .vs-btn span.vs-label { display: none; }
+  #view-switch { padding: 3px; }
+}
+
+/* ============================================================
+   Раскладка дашборда
+   ============================================================ */
+#dash-view {
+  display: flex;
+  align-items: flex-start;
+  gap: 18px;
+  padding: 84px 18px 28px;
+  min-height: 100vh;
+}
+
+#dash {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  gap: 18px;
+  align-content: start;
+}
+
+/* Постоянная колонка уведомлений справа */
+#notif-col {
+  flex: 0 0 320px;
+  position: sticky;
+  top: 84px;
+  max-height: calc(100vh - 108px);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+/* ============================================================
+   Карточки
+   ============================================================ */
+.dash-card,
+#dash .side-panel {
+  display: flex;
+  flex-direction: column;
+  border-radius: var(--nb-radius);
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15), 0 1px 0 rgba(255,255,255,0.02) inset;
+  overflow: hidden;
+  position: static;
+  width: 100%;
+  min-width: 0;
+  transition: box-shadow 0.2s ease, transform 0.15s ease, border-color 0.2s ease;
+}
+
+.dash-card:hover,
+#dash .side-panel:hover {
+  box-shadow: 0 8px 20px rgba(255,111,181,0.25), 0 2px 8px rgba(0,0,0,0.2), 0 1px 0 rgba(255,255,255,0.02) inset;
+  border-color: rgba(255,111,181,0.5);
+  transform: translateY(-1px);
+}
+
+.dash-card { min-height: 200px; max-height: 380px; }
+
+.dash-card-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 11px 14px;
+  border-bottom: 1px solid var(--border);
+  flex: none;
+}
+.dash-card-head h2 {
+  font-size: 14px;
+  margin: 0;
+  flex: 1;
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+}
+.dash-card-head .dc-sub { font-size: 10.5px; color: var(--muted); font-weight: 400; }
+
+.dash-card-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 8px 10px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* Кнопка сворачивания карточки */
+.dc-collapse {
+  flex: none;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1;
+}
+.dc-collapse:hover { color: var(--accent); border-color: var(--accent); }
+
+.dash-card.collapsed { min-height: 0; max-height: none; }
+.dash-card.collapsed .dash-card-body { display: none; }
+
+/* Панели-карточки (.side-panel) — перекрываем абсолютное позиционирование */
+#dash .side-panel {
+  min-height: 180px;
+  max-height: 380px;
+  border-radius: var(--nb-radius);
+  background: var(--panel);
+}
+#dash .side-panel .sp-head { border-bottom: 1px solid var(--border); }
+#dash .side-panel.collapsed { min-height: 0; }
+#dash .side-panel.collapsed .sp-pane,
+#dash .side-panel.collapsed .sp-head .st-tabs { display: none; }
+
+/* Модульные тела без собственных панелей (sw-movies / sw-news / sw-music) */
+#dash .dash-mod {
+  flex: 1;
+  min-height: 0;
+  overflow: visible;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* AI-панель и файлы внутри карточек */
+#dash #ai-panel,
+#dash #files-panel {
+  position: static !important;
+  inset: auto !important;
+  width: 100% !important;
+  height: auto !important;
+  max-height: none !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  z-index: auto !important;
+  background: transparent !important;
+}
+#dash #ai-panel { flex: 1; min-height: 320px; }
+#dash #files-panel { flex: 1; min-height: 0; }
+#dash #ai-panel .close-btn,
+#dash #files-panel .close-btn { display: none; }
+
+/* Инструменты звуков */
+#dash .card-glass {
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  padding: 0;
+}
+
+/* Сводка задач */
+#dash-tasks .task-col {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 11px;
+  border-radius: 12px;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--col-color, var(--accent));
+}
+#dash-tasks .task-col .tc-title { flex: 1; font-size: 14px; font-weight: 600; }
+#dash-tasks .task-col .tc-count {
+  font-size: 12px;
+  font-weight: 700;
+  color: #1a0f1c;
+  background: linear-gradient(135deg, var(--nb-pink), var(--nb-violet));
+  border-radius: 20px;
+  padding: 1px 10px;
+}
+#dash-tasks .tasks-open {
+  margin-top: 4px;
+  padding: 10px;
+  border-radius: 12px;
+  font-weight: 600;
+  color: #1a0f1c;
+  background: linear-gradient(135deg, var(--nb-pink), var(--nb-violet));
+}
+#dash-tasks .tasks-open:hover { filter: brightness(1.08); }
+#dash-tasks .tasks-empty { color: var(--muted); font-size: 13px; padding: 6px 2px; }
+
+/* Колонка уведомлений */
+#notif-col .dash-card { max-height: none; height: 100%; min-height: 0; }
+#notif-col #sw-notif { flex: 1; min-height: 0; overflow-y: auto; padding: 4px 2px; }
+
+/* Доска — кастомный скролл в тёмной теме оставляем как есть */
+#world { background: transparent; }
+
+/* Топбар: убираем резерв под докнутую ИИ-панель */
+@media (min-width: 1000px) {
+  :root { --ai-w: 0px; }
+  #topbar { padding-right: 16px; }
+  #ai-resizer { display: none !important; }
+}
+
+/* Адаптив: колонка уведомлений уезжает под карточки */
+@media (max-width: 1000px) {
+  #dash-view { flex-direction: column; padding: 78px 12px 24px; }
+  #notif-col {
+    position: static;
+    flex: none;
+    width: 100%;
+    max-height: 420px;
+    top: auto;
+  }
+  #dash { grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); width: 100%; }
+}
+
+@media (max-width: 560px) {
+  #dash { grid-template-columns: 1fr; }
+  #dash-view { padding: 72px 10px 20px; }
+}
+
+/* Кнопка сворачивания в панелях (.side-panel) */
+.sp-collapse {
+  flex: none;
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1;
+}
+.sp-collapse:hover { color: var(--accent); border-color: var(--accent); }
+
+/* --- Лёгкие тени/подсветка от шейдеров --- */
+[data-shaders="1"] body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(600px 300px at 10% 0%, rgba(255,111,181,0.12), transparent 60%),
+    radial-gradient(500px 250px at 90% 0%, rgba(168,121,255,0.12), transparent 60%);
+  z-index: -1;
+}
+
+.nb-shader-bg { position: fixed; inset: 0; pointer-events: none; z-index: -2; }
+.nb-shader-layer { position: absolute; inset: -50%; filter: blur(80px); opacity: 0.15; animation: nb-drift 40s ease-in-out infinite; }
+.nb-sh1 { background: radial-gradient(circle, rgba(255,111,181,0.4) 0%, transparent 70%); animation-duration: 35s; }
+.nb-sh2 { background: radial-gradient(circle, rgba(168,121,255,0.35) 0%, transparent 70%); animation-duration: 50s; animation-delay: -10s; transform: scale(1.2); }
+@keyframes nb-drift {
+  0% { transform: translate(0, 0) scale(1); }
+  25% { transform: translate(20px, -30px) scale(1.05); }
+  50% { transform: translate(-15px, -10px) scale(0.95); }
+  75% { transform: translate(-25px, 25px) scale(1.1); }
+  100% { transform: translate(0, 0) scale(1); }
+}
+
+/* ================= COOKIES → ИНТЕРЕСЫ: прогресс, лог, теги, портрет ================= */
+.cookies-progress-wrap { margin-top: 12px; display: flex; flex-direction: column; gap: 6px; }
+.cookies-progress { width: 100%; height: 10px; border-radius: 6px; background: var(--panel-2, #1a1f2b); border: 1px solid var(--border, #2a3340); overflow: hidden; }
+.cookies-progress-fill { height: 100%; width: 0%; border-radius: 6px; background: linear-gradient(90deg, var(--nb-pink), var(--nb-violet)); transition: width 0.25s ease; }
+.cookies-progress-label { font-size: 12px; color: var(--text-soft, #a8b4c0); min-height: 16px; }
+
+.cookies-log { margin-top: 10px; max-height: 220px; overflow: auto; display: flex; flex-direction: column; gap: 2px;
+  background: var(--panel-2, #1a1f2b); border: 1px solid var(--border, #2a3340); border-radius: 10px; padding: 8px 10px; font-size: 12px; line-height: 1.45; }
+.cookies-log-row { color: var(--text-soft, #a8b4c0); white-space: pre-wrap; }
+.cookies-log-row.tag { color: var(--nb-pink-2, #ff9ecb); }
+.cookies-log-row.ok { color: #7fe3b0; }
+.cookies-log-row.err { color: #ff8a8a; }
+
+.cookies-tags { margin-top: 10px; display: flex; flex-wrap: wrap; gap: 6px; }
+.cookies-tag { font-size: 12px; padding: 3px 9px; border-radius: 14px; border: 1px solid var(--nb-pink-line);
+  background: var(--nb-pink-soft); color: var(--text, #e8edf3); animation: tag-pop 0.22s ease; }
+.cookies-tag b { color: var(--nb-pink-2, #ff9ecb); font-weight: 600; }
+@keyframes tag-pop { from { transform: scale(0.85); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+
+.cookies-portrait { margin-top: 14px; padding: 14px 16px; border-radius: 14px; border: 1px solid var(--nb-pink-line);
+  background: linear-gradient(135deg, rgba(255,111,181,0.10), rgba(168,121,255,0.10)); }
+.portrait-head { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }
+.portrait-ic { font-size: 34px; line-height: 1; }
+.portrait-title { font-size: 18px; font-weight: 700; color: var(--nb-pink-2, #ff9ecb); }
+.portrait-sub { font-size: 11.5px; color: var(--muted, #7d8896); }
+.portrait-summary { font-size: 13px; line-height: 1.5; color: var(--text, #e8edf3); margin-bottom: 10px; }
+.portrait-traits { display: flex; flex-wrap: wrap; gap: 6px; }
+.portrait-trait { display: flex; align-items: center; gap: 6px; font-size: 12px; padding: 4px 10px; border-radius: 12px;
+  background: var(--panel-2, #1a1f2b); border: 1px solid var(--border, #2a3340); }
+.portrait-trait-ic { font-size: 14px; }
+.portrait-trait-name { color: var(--text-soft, #a8b4c0); }
+.portrait-trait-w { color: var(--nb-pink, #ff6fb5); font-weight: 600; }
+
+.int-portrait { padding: 10px 12px; border-radius: 12px; border: 1px solid var(--nb-pink-line); background: var(--nb-pink-soft); margin-bottom: 6px; }
+.int-portrait-head { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+.int-portrait-ic { font-size: 22px; }
+.int-portrait-title { font-weight: 700; color: var(--nb-pink-2, #ff9ecb); font-size: 13.5px; }
+.int-portrait-sum { font-size: 11.5px; line-height: 1.45; color: var(--text-soft, #a8b4c0); }
+.int-auto { font-size: 9px; padding: 0 5px; border-radius: 8px; background: var(--nb-violet); color: #fff; vertical-align: middle; }

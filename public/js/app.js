@@ -524,11 +524,12 @@ window.APP = {
     this.openModal(`
       <div class="modal-head"><h3>Настройки</h3><button class="close-btn" data-close-modal>✕</button></div>
       <div class="modal-body">
-        <div class="tabs">
-          <button class="tab active" data-tab="bg">🎨 Фон</button>
-          <button class="tab" data-tab="ai">🤖 ИИ</button>
-        </div>
-        <div class="tab-pane active" id="pane-bg">
+          <div class="tabs">
+            <button class="tab active" data-tab="bg">🎨 Фон</button>
+            <button class="tab" data-tab="ui">🧪 Интерфейс</button>
+            <button class="tab" data-tab="ai">🤖 ИИ</button>
+          </div>
+          <div class="tab-pane active" id="pane-bg">
           <label>Фоновый цвет</label>
           <div class="bg-presets" id="bg-presets">
             ${gradients.map((g, i) => `<div class="bg-preset${(s.type==='color' && s.value===g.value) ? ' sel' : ''}" style="background:${g.value}" data-bg-idx="${i}" title="${g.name}"></div>`).join('')}
@@ -546,6 +547,26 @@ window.APP = {
           <div class="slider-row"><label>Размытие</label><input type="range" id="bg-blur" min="0" max="20" value="${s.blur || 0}"><span id="bg-blur-v">${s.blur || 0}px</span></div>
           <div class="slider-row"><label>Затемнение</label><input type="range" id="bg-darken" min="0" max="80" value="${s.darken || 0}"><span id="bg-darken-v">${s.darken || 0}%</span></div>
           <div class="slider-row"><label><input type="checkbox" id="bg-adapt" ${(s.adapt === false) ? '' : 'checked'}> Подбирать цвета под фон</label></div>
+        </div>
+        <div class="tab-pane" id="pane-ui">
+          <label>Масштаб UI</label>
+          <div class="slider-row">
+            <input type="range" id="ui-scale" min="0.4" max="2.0" step="0.1" value="1.0">
+            <span id="ui-scale-v">100%</span>
+          </div>
+          <button class="btn" id="ui-scale-reset">Сброс</button>
+          <div class="hint">Устанавливает общий масштаб интерфейса. Сохраняется между перезагрузками.</div>
+
+          <label>Цветовая тема</label>
+          <select id="theme-mode">
+            <option value="auto">Авто (по времени суток)</option>
+            <option value="light">Светлая</option>
+            <option value="dark">Тёмная</option>
+          </select>
+          <div class="hint">Авто переключается в зависимости от часа. Светлая/тёмная принудительные.</div>
+
+          <label><input type="checkbox" id="shaders-toggle"> Включить лёгкие шейдеры</label>
+          <div class="hint">Бесшумные фоновые эффекты с минимальной нагрузкой. Отключите если возникают просадки FPS.</div>
         </div>
         <div class="tab-pane" id="pane-ai">
           <label>Движок</label>
@@ -627,6 +648,48 @@ window.APP = {
       } catch (e) { document.getElementById('ai-config-status').textContent = '❌ Ошибка сети'; }
       this.save(); this.closeModal();
     };
+
+    const modeSel = document.getElementById('theme-mode');
+    if (modeSel && window.THEME) {
+      modeSel.value = (window.THEME.getMode && window.THEME.getMode()) || 'auto';
+      modeSel.onchange = () => { if (window.THEME.setMode) window.THEME.setMode(modeSel.value); };
+    }
+
+    const uiScale = document.getElementById('ui-scale');
+    const uiScaleV = document.getElementById('ui-scale-v');
+    const uiScaleReset = document.getElementById('ui-scale-reset');
+    const curS = window.CANVAS && window.CANVAS.view ? window.CANVAS.view().s : 1;
+    if (uiScale) {
+      uiScale.value = String(curS);
+      if (uiScaleV) uiScaleV.textContent = Math.round(curS * 100) + '%';
+      uiScale.oninput = () => {
+        const s = parseFloat(uiScale.value);
+        if (uiScaleV) uiScaleV.textContent = Math.round(s * 100) + '%';
+        if (window.CANVAS && window.CANVAS.scaleAtCenter) window.CANVAS.scaleAtCenter(s);
+        else if (window.CANVAS && window.CANVAS.zoomAt) {
+          const cx = window.innerWidth / 2, cy = window.innerHeight / 2;
+          window.CANVAS.zoomAt(cx, cy, s / (window.CANVAS.view ? window.CANVAS.view().s : 1));
+        }
+      };
+    }
+    if (uiScaleReset) {
+      uiScaleReset.onclick = () => {
+        if (window.CANVAS && window.CANVAS.reset) window.CANVAS.reset();
+        if (uiScale) uiScale.value = '1.0';
+        if (uiScaleV) uiScaleV.textContent = '100%';
+      };
+    }
+
+    const shadersT = document.getElementById('shaders-toggle');
+    const SHAD_KEY = 'nb-shaders';
+    if (shadersT) {
+      try { shadersT.checked = (localStorage.getItem(SHAD_KEY) || '0') === '1'; } catch (e) {}
+      shadersT.onchange = () => {
+        try { localStorage.setItem(SHAD_KEY, shadersT.checked ? '1' : '0'); } catch (e) {}
+        if (window.BGSHADER) window.BGSHADER.toggle(shadersT.checked);
+        else { document.documentElement.dataset.shaders = shadersT.checked ? '1' : '0'; }
+      };
+    }
 
     document.querySelectorAll('.tab').forEach(t => {
       t.onclick = () => {

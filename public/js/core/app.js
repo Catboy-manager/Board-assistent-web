@@ -1,5 +1,9 @@
 (function () {
   const toast = (title, msg) => {
+    if (window.NOTIF_DRAWER && window.NOTIF_DRAWER.push) {
+      window.NOTIF_DRAWER.push({ title, text: msg });
+      return;
+    }
     const c = document.getElementById('toast-container');
     if (!c) return;
     const t = document.createElement('div');
