@@ -501,6 +501,25 @@ label { display: block; font-size: 13px; color: var(--muted); margin: 12px 0 5px
 .guide-sec ul { margin: 0; padding-left: 18px; }
 .guide-sec li { font-size: 13px; line-height: 1.55; color: var(--text); margin-bottom: 3px; }
 
+/* Широкая справка */
+.modal-card.guide-modal { width: min(780px, calc(94 * var(--zvw) / 100)); }
+.guide-lead { font-size: 13px; line-height: 1.6; color: var(--text); margin: 0 0 14px; }
+.guide-body details { border: 1px solid var(--border); border-radius: 12px; padding: 8px 12px; margin-bottom: 9px; background: rgba(255,255,255,0.02); }
+.guide-body details[open] { background: rgba(255,255,255,0.035); }
+.guide-body summary { cursor: pointer; font-weight: 700; font-size: 13.5px; color: var(--accent); outline: none; list-style: none; padding: 3px 0; }
+.guide-body summary::-webkit-details-marker { display: none; }
+.guide-body summary::before { content: '▸ '; }
+.guide-body details[open] summary::before { content: '▾ '; }
+.guide-body details > *:not(summary) { margin-top: 6px; }
+.guide-body ul { margin: 6px 0 2px; padding-left: 18px; }
+.guide-body li { font-size: 13px; line-height: 1.55; color: var(--text); margin-bottom: 4px; }
+.guide-body code { background: rgba(255,255,255,0.08); border-radius: 5px; padding: 1px 5px; font-family: ui-monospace, monospace; font-size: 12px; }
+.guide-body pre { background: rgba(0,0,0,0.35); border: 1px solid var(--border); border-radius: 9px; padding: 9px 11px; overflow-x: auto; font-size: 12px; line-height: 1.5; margin: 7px 0; color: #cfe3ff; }
+.guide-body .g-note { font-size: 12px; color: var(--muted); line-height: 1.5; }
+.guide-body .g-hl { border-color: #ff6fb5; background: rgba(255,111,181,0.07); }
+.guide-body ol { margin: 6px 0 2px; padding-left: 20px; }
+.guide-body ol li { font-size: 13px; line-height: 1.55; }
+
 .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .select-row { display: flex; gap: 10px; align-items: center; }
 

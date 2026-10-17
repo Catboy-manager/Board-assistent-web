@@ -1153,11 +1153,15 @@ async function handleRequest(req, res) {
     }
 
     if (p.startsWith('/uploads/')) {
-      const file = path.normalize(path.join(UPLOAD_DIR, path.basename(p)));
-      if (!fs.existsSync(file)) { res.writeHead(404); return res.end('not found'); }
+      const rel = decodeURIComponent(p.slice('/uploads/'.length));
+      const file = path.normalize(path.join(UPLOAD_DIR, rel));
+      const base = UPLOAD_DIR.endsWith(path.sep) ? UPLOAD_DIR : UPLOAD_DIR + path.sep;
+      if (file !== UPLOAD_DIR && !file.startsWith(base)) { res.writeHead(403); return res.end('forbidden'); }
+      let fst;
+      try { fst = fs.statSync(file); } catch (e) { fst = null; }
+      if (!fst || !fst.isFile()) { res.writeHead(404); return res.end('not found'); }
       const ext = path.extname(file).toLowerCase();
-      const st = fs.statSync(file);
-      res.writeHead(200, { 'Content-Type': MIME[ext] || 'application/octet-stream', 'Content-Length': st.size, 'Cache-Control': 'public, max-age=86400' });
+      res.writeHead(200, { 'Content-Type': MIME[ext] || 'application/octet-stream', 'Content-Length': fst.size, 'Cache-Control': 'public, max-age=86400' });
       const rs = fs.createReadStream(file);
       rs.on('error', () => { try { res.destroy(); } catch (e) {} });
       return rs.pipe(res);

@@ -386,3 +386,27 @@ body:not([data-view="cookies"]) #cookies-view { display: none !important; }
 .int-portrait-title { font-weight: 700; color: var(--nb-pink-2, #ff9ecb); font-size: 13.5px; }
 .int-portrait-sum { font-size: 11.5px; line-height: 1.45; color: var(--text-soft, #a8b4c0); }
 .int-auto { font-size: 9px; padding: 0 5px; border-radius: 8px; background: var(--nb-violet); color: #fff; vertical-align: middle; }
+
+/* Звуки уведомлений (#w-sounds) */
+.snd-wrap { display: flex; flex-direction: column; gap: 12px; font-size: 12.5px; }
+.snd-block { background: var(--panel-2, rgba(255,255,255,0.04)); border: 1px solid var(--border, rgba(255,255,255,0.08)); border-radius: 10px; padding: 10px 11px; }
+.snd-title { font-weight: 700; margin-bottom: 7px; color: var(--text, #eef); }
+.snd-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 7px; }
+.snd-row:last-child { margin-bottom: 0; }
+.snd-lbl { color: var(--text-soft, #a8b4c0); min-width: 74px; }
+.snd-num { min-width: 30px; text-align: right; color: var(--text-soft, #a8b4c0); }
+.snd-note { font-size: 11px; color: var(--text-soft, #a8b4c0); line-height: 1.4; }
+.snd-note.ok { color: #6cd68c; }
+.snd-note.err { color: #ff8080; }
+.snd-sel { flex: 1; min-width: 150px; padding: 6px 8px; border-radius: 8px; border: 1px solid var(--border, rgba(255,255,255,0.12)); background: var(--panel, #1c2230); color: var(--text, #eef); }
+.snd-range { flex: 1; accent-color: var(--nb-pink, #ff6fb5); }
+.snd-file { flex: 1; min-width: 140px; font-size: 11px; color: var(--text-soft, #a8b4c0); }
+.snd-mine { display: flex; flex-direction: column; gap: 5px; margin-top: 6px; }
+.snd-mine-row { display: flex; align-items: center; gap: 8px; }
+.snd-mine-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.snd-rules { display: flex; flex-direction: column; gap: 7px; margin-bottom: 7px; }
+.snd-rule { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.snd-pat { flex: 1; min-width: 110px; padding: 5px 8px; border-radius: 8px; border: 1px solid var(--border, rgba(255,255,255,0.12)); background: var(--panel, #1c2230); color: var(--text, #eef); }
+.snd-rule-sel { min-width: 120px; padding: 5px 6px; border-radius: 8px; border: 1px solid var(--border, rgba(255,255,255,0.12)); background: var(--panel, #1c2230); color: var(--text, #eef); }
+.snd-rule-vol { width: 100px; accent-color: var(--nb-pink, #ff6fb5); }
+.btn-ghost.primary { background: var(--nb-pink, #ff6fb5); color: #fff; }
