@@ -98,49 +98,117 @@ module.exports = (deps) => {
   function saveAuth() { try { fs.writeFileSync(AUTH_FILE, JSON.stringify(auth, null, 2)); } catch (e) {} }
   function cookiesExist() { try { return fs.existsSync(COOKIES_FILE) && fs.statSync(COOKIES_FILE).size > 0; } catch (e) { return false; } }
 
-  /* Ищет файлы cookies популярных браузеров (обычные и snap/flatpak). */
-  function browserCookieDbs(browser) {
-    const home = require('os').homedir();
+  /* Возвращает список подпапок-профилей Chrome/Chromium, где есть Cookies или History. */
+  function chromeProfilesIn(root) {
     const out = [];
-    const push = (p) => { try { if (fs.existsSync(p)) out.push(p); } catch (e) {} };
-    const chromeProfiles = ['Default', 'Profile 1', 'Profile 2', 'Profile 3'];
-    const chromeRoots = [
-      path.join(home, '.config/google-chrome'),
-      path.join(home, '.config/chromium'),
-      path.join(home, 'snap/chromium/common/chromium'),
-      path.join(home, '.var/app/org.chromium.Chromium/config/chromium')
-    ];
-    const firefoxRoots = [
-      path.join(home, '.mozilla/firefox'),
-      path.join(home, 'snap/firefox/common/.mozilla/firefox'),
-      path.join(home, '.var/app/org.mozilla.firefox/.mozilla/firefox')
-    ];
-    const wantChrome = !browser || browser === 'chrome';
-    const wantFirefox = !browser || browser === 'firefox';
-    if (wantChrome) {
-      for (const root of chromeRoots) for (const prof of chromeProfiles) push(path.join(root, prof, 'Cookies'));
-    }
-    if (wantFirefox) {
-      for (const root of firefoxRoots) {
+    try {
+      for (const d of fs.readdirSync(root)) {
+        if (d === 'System Profile' || /^Guest Profile$/.test(d)) continue;
+        const base = path.join(root, d);
         try {
-          for (const d of fs.readdirSync(root)) {
-            if (/\.default/.test(d) || /\.default-release/.test(d)) push(path.join(root, d, 'cookies.sqlite'));
-          }
+          if (!fs.statSync(base).isDirectory()) continue;
+          if (fs.existsSync(path.join(base, 'Cookies')) || fs.existsSync(path.join(base, 'History'))) out.push(base);
         } catch (e) {}
       }
-    }
+    } catch (e) {}
     return out;
   }
 
-  /* Читает cookies из одной БД браузера (скопировав файл, чтобы не мешать блокировке).
+  /* Корни профилей Chrome/Chromium/Brave/Edge во всех ОС. */
+  function chromeRoots() {
+    const home = require('os').homedir();
+    const env = process.env;
+    const list = [
+      path.join(home, '.config/google-chrome'),
+      path.join(home, '.config/chromium'),
+      path.join(home, '.config/BraveSoftware/Brave-Browser'),
+      path.join(home, '.config/microsoft-edge'),
+      path.join(home, 'snap/chromium/common/chromium'),
+      path.join(home, '.var/app/org.chromium.Chromium/config/chromium'),
+      path.join(home, 'Library/Application Support/Google/Chrome'),
+      path.join(home, 'Library/Application Support/Chromium'),
+      path.join(home, 'Library/Application Support/BraveSoftware/Brave-Browser')
+    ];
+    if (env.LOCALAPPDATA) {
+      list.push(path.join(env.LOCALAPPDATA, 'Google/Chrome/User Data'));
+      list.push(path.join(env.LOCALAPPDATA, 'Chromium/User Data'));
+      list.push(path.join(env.LOCALAPPDATA, 'BraveSoftware/Brave-Browser/User Data'));
+      list.push(path.join(env.LOCALAPPDATA, 'Microsoft/Edge/User Data'));
+    }
+    return list;
+  }
+
+  /* Корни профилей Firefox во всех ОС. */
+  function firefoxRoots() {
+    const home = require('os').homedir();
+    const env = process.env;
+    const list = [
+      path.join(home, '.mozilla/firefox'),
+      path.join(home, 'snap/firefox/common/.mozilla/firefox'),
+      path.join(home, '.var/app/org.mozilla.firefox/.mozilla/firefox'),
+      path.join(home, 'Library/Application Support/Firefox/Profiles')
+    ];
+    if (env.APPDATA) list.push(path.join(env.APPDATA, 'Mozilla/Firefox/Profiles'));
+    return list;
+  }
+
+  function firefoxProfilesIn(root) {
+    const out = [];
+    try {
+      for (const d of fs.readdirSync(root)) {
+        const base = path.join(root, d);
+        try {
+          if (!fs.statSync(base).isDirectory()) continue;
+          if (fs.existsSync(path.join(base, 'cookies.sqlite')) || fs.existsSync(path.join(base, 'places.sqlite'))) out.push(base);
+        } catch (e) {}
+      }
+    } catch (e) {}
+    return out;
+  }
+
+  /* Ищет файлы cookies популярных браузеров (обычные и snap/flatpak, Linux/macOS/Windows). */
+  function browserCookieDbs(browser) {
+    const out = [];
+    const push = (p) => { try { if (fs.existsSync(p)) out.push(p); } catch (e) {} };
+    const wantChrome = !browser || browser === 'chrome';
+    const wantFirefox = !browser || browser === 'firefox';
+    if (wantChrome) for (const root of chromeRoots()) for (const prof of chromeProfilesIn(root)) push(path.join(prof, 'Cookies'));
+    if (wantFirefox) for (const root of firefoxRoots()) for (const prof of firefoxProfilesIn(root)) push(path.join(prof, 'cookies.sqlite'));
+    return out;
+  }
+
+  /* Ищет БД истории посещений (Chrome History / Firefox places.sqlite). */
+  function browserHistoryDbs(browser) {
+    const out = [];
+    const push = (p) => { try { if (fs.existsSync(p)) out.push(p); } catch (e) {} };
+    const wantChrome = !browser || browser === 'chrome';
+    const wantFirefox = !browser || browser === 'firefox';
+    if (wantChrome) for (const root of chromeRoots()) for (const prof of chromeProfilesIn(root)) push(path.join(prof, 'History'));
+    if (wantFirefox) for (const root of firefoxRoots()) for (const prof of firefoxProfilesIn(root)) push(path.join(prof, 'places.sqlite'));
+    return out;
+  }
+
+  /* Копирует БД вместе с WAL/SHM (свежие записи Chrome лежат в -wal, без него данные «отстают»). */
+  function copyDbWithWal(db) {
+    const tmp = db + '.kanban.tmp';
+    fs.copyFileSync(db, tmp);
+    for (const suf of ['-wal', '-shm']) {
+      try { if (fs.existsSync(db + suf)) fs.copyFileSync(db + suf, tmp + suf); } catch (e) {}
+    }
+    return tmp;
+  }
+  function cleanupTmp(tmp) {
+    for (const suf of ['', '-wal', '-shm']) { try { fs.unlinkSync(tmp + suf); } catch (e) {} }
+  }
+
+  /* Читает cookies из одной БД браузера (скопировав файл вместе с WAL, чтобы не мешать блокировке).
      Возвращает { rows: ["Domain=host\tname\thost", …] }. */
   function readOneCookieDb(db) {
     let Database;
     try { Database = require('node:sqlite').DatabaseSync; } catch (e) { return { rows: [], error: 'no sqlite' }; }
     let tmp = null;
     try {
-      tmp = db + '.kanban.tmp';
-      fs.copyFileSync(db, tmp);
+      tmp = copyDbWithWal(db);
       const d = new Database(tmp, { readOnly: true });
       let raw = [];
       try {
@@ -154,7 +222,37 @@ module.exports = (deps) => {
     } catch (e) {
       return { rows: [], error: String((e && e.message) || e) };
     } finally {
-      try { if (tmp) fs.unlinkSync(tmp); } catch (e) {}
+      cleanupTmp(tmp);
+    }
+  }
+
+  /* Читает историю посещений (URL + заголовки) — она меняется каждый день,
+     в отличие от cookies, поэтому именно она отражает активность в браузере. */
+  function readOneHistoryDb(db, limit) {
+    let Database;
+    try { Database = require('node:sqlite').DatabaseSync; } catch (e) { return { rows: [], error: 'no sqlite' }; }
+    const lim = limit || 3000;
+    let tmp = null;
+    try {
+      tmp = copyDbWithWal(db);
+      const d = new Database(tmp, { readOnly: true });
+      let raw = [];
+      try {
+        raw = d.prepare('SELECT url AS url, title AS title FROM urls WHERE url IS NOT NULL ORDER BY last_visit_time DESC LIMIT ' + lim).all();
+      } catch (e) {
+        try { raw = d.prepare('SELECT url AS url, title AS title FROM moz_places WHERE url IS NOT NULL AND title IS NOT NULL ORDER BY last_visit_date DESC LIMIT ' + lim).all(); } catch (e2) { raw = []; }
+      }
+      try { d.close(); } catch (e) {}
+      const rows = raw.filter(r => r && r.url).map(r => {
+        let host = '';
+        try { host = new URL(r.url).hostname; } catch (e) { host = String(r.url); }
+        return host + '\t' + (r.title || '');
+      });
+      return { rows };
+    } catch (e) {
+      return { rows: [], error: String((e && e.message) || e) };
+    } finally {
+      cleanupTmp(tmp);
     }
   }
 
@@ -164,20 +262,30 @@ module.exports = (deps) => {
     return parts.slice(-2).join('/');
   }
 
-  /* Читает cookies из БД браузера. Возвращает строку "Domain=host\tname" для анализа. */
-  function extractBrowserCookies(browser) {
-    const dbs = browserCookieDbs(browser);
-    if (!dbs.length) return { ok: false, error: 'no browser cookie db found' };
+  /* Читает cookies И историю из браузера. Возвращает текст для анализа сигналов.
+     opts.withHistory !== false — добавляет историю посещений (важно: она ежедневно меняется). */
+  function extractBrowserCookies(browser, opts) {
+    const withHistory = !(opts && opts.withHistory === false);
+    const cookieDbs = browserCookieDbs(browser);
+    const historyDbs = withHistory ? browserHistoryDbs(browser) : [];
+    const dbs = cookieDbs.concat(historyDbs);
+    if (!cookieDbs.length && !historyDbs.length) return { ok: false, error: 'no browser cookie db found' };
     const lines = [];
     let used = '';
+    let cookieCount = 0, historyCount = 0;
     const details = [];
-    for (const db of dbs) {
+    for (const db of cookieDbs) {
       const r = readOneCookieDb(db);
-      details.push({ db, count: r.rows.length });
-      if (r.rows.length) { lines.push(...r.rows); used = db; }
+      details.push({ db, kind: 'cookies', count: r.rows.length });
+      if (r.rows.length) { lines.push(...r.rows); cookieCount += r.rows.length; used = used || db; }
     }
-    if (!lines.length) return { ok: false, error: 'no cookies read' };
-    return { ok: true, text: lines.join('\n'), count: lines.length, browser: used, details, dbs };
+    for (const db of historyDbs) {
+      const r = readOneHistoryDb(db);
+      details.push({ db, kind: 'history', count: r.rows.length });
+      if (r.rows.length) { lines.push(...r.rows); historyCount += r.rows.length; used = used || db; }
+    }
+    if (!lines.length) return { ok: false, error: 'no cookies or history read', dbs, details };
+    return { ok: true, text: lines.join('\n'), count: lines.length, cookieCount, historyCount, browser: used, details, dbs };
   }
 
 
@@ -505,10 +613,11 @@ module.exports = (deps) => {
         if (body && body.source === 'browser') {
           const ex = extractBrowserCookies(String(body.browser || '') || null);
           if (!ex.ok) return json(res, 404, { error: ex.error || 'browser cookies not found' });
-          try { fs.writeFileSync(COOKIES_FILE, ex.text, { flag: 'w' }); } catch (e) { return json(res, 500, { error: 'write failed' }); }
+          const cookieText = ex.text.split('\n').filter(l => /^Domain=/.test(l)).join('\n');
+          try { fs.writeFileSync(COOKIES_FILE, cookieText, { flag: 'w' }); } catch (e) { return json(res, 500, { error: 'write failed' }); }
           auth.browser = String(body.browser || '') || auth.browser || 'chrome';
           saveAuth();
-          return json(res, 200, { ok: true, size: Buffer.byteLength(ex.text), count: ex.count, browser: auth.browser });
+          return json(res, 200, { ok: true, size: Buffer.byteLength(cookieText), count: ex.cookieCount || 0, browser: auth.browser });
         }
       }
       if (!buf || !buf.length) return json(res, 400, { error: 'empty body' });
@@ -616,19 +725,22 @@ module.exports = (deps) => {
         await tick(40);
       } else {
         const browser = String((opts && opts.browser) || '') || null;
-        const dbs = browserCookieDbs(browser);
+        const cookieDbs = browserCookieDbs(browser);
+        const historyDbs = browserHistoryDbs(browser);
+        const dbs = cookieDbs.map(db => ({ db, kind: 'cookies' })).concat(historyDbs.map(db => ({ db, kind: 'history' })));
         source = browser || 'auto';
-        jobEmit(job, { stage: 'scan', pct: 5, message: 'Ищу базы cookies' + (browser ? ' (' + browser + ')' : '') + '… найдено: ' + dbs.length, files: dbs.map(prettyDb) });
+        jobEmit(job, { stage: 'scan', pct: 5, message: 'Ищу базы cookies и истории' + (browser ? ' (' + browser + ')' : '') + '… найдено: ' + dbs.length, files: dbs.map(d => prettyDb(d.db)) });
         await tick(60);
         if (!dbs.length) { jobEmit(job, { stage: 'error', pct: 100, message: 'Базы cookies не найдены — браузер не установлен или профиль пуст' }); job.done = true; return; }
         const lines = [];
+        let cookieCount = 0, historyCount = 0;
         for (let i = 0; i < dbs.length; i++) {
-          const db = dbs[i];
+          const { db, kind } = dbs[i];
           const base = 8 + Math.round((i / dbs.length) * 30);
-          jobEmit(job, { stage: 'read', pct: base, message: 'Читаю ' + prettyDb(db) + '…', file: prettyDb(db) });
+          jobEmit(job, { stage: 'read', pct: base, message: 'Читаю ' + (kind === 'history' ? 'историю ' : '') + prettyDb(db) + '…', file: prettyDb(db) });
           await tick(50);
-          const r = readOneCookieDb(db);
-          if (r.rows.length) { lines.push(...r.rows); usedBrowser = db; }
+          const r = kind === 'history' ? readOneHistoryDb(db) : readOneCookieDb(db);
+          if (r.rows.length) { lines.push(...r.rows); usedBrowser = usedBrowser || db; if (kind === 'history') historyCount += r.rows.length; else cookieCount += r.rows.length; }
           jobEmit(job, { stage: 'read', pct: base + 3, message: '  → ' + prettyDb(db) + ': записей ' + r.rows.length, count: r.rows.length, file: prettyDb(db) });
           await tick(40);
         }
@@ -636,12 +748,14 @@ module.exports = (deps) => {
         text = lines.join('\n');
         count = lines.length;
         try {
-          fs.writeFileSync(COOKIES_FILE, text, { flag: 'w' });
+          /* в файл сохраняем только cookie-строки (для yt-dlp), историю — не пишем */
+          fs.writeFileSync(COOKIES_FILE, lines.filter(l => /^Domain=/.test(l)).join('\n'), { flag: 'w' });
           auth.browser = String((opts && opts.browser) || '') || auth.browser || 'chrome';
           saveAuth();
         } catch (e) {}
-        jobEmit(job, { stage: 'read', pct: 40, message: 'Прочитано всего записей: ' + count + (usedBrowser ? ' (' + prettyDb(usedBrowser) + ')' : ''), count });
+        jobEmit(job, { stage: 'read', pct: 40, message: 'Прочитано записей: ' + count + ' (cookies ' + cookieCount + ', история ' + historyCount + ')' + (usedBrowser ? ' (' + prettyDb(usedBrowser) + ')' : ''), count, cookieCount, historyCount });
       }
+
 
       jobEmit(job, { stage: 'parse', pct: 45, message: 'Разбираю домены и сигналы…' });
       await tick(60);

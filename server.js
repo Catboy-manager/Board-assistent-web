@@ -65,8 +65,8 @@ const consoleMod = require('./console')({
 });
 if (typeof movies.prime === 'function') movies.prime();
 
-let config = {};
-try { config = JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf8')); } catch (e) { console.error('config.json not read:', e.message); }
+let config = { ai: {} };
+try { config = Object.assign({ ai: {} }, JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf8'))); } catch (e) { console.error('config.json not read:', e.message); }
 consoleAuth.key = String(process.env.KANBAN_CONSOLE_KEY || (config && config.consoleKey) || '');
 
 let db = defaultDb();
@@ -999,10 +999,15 @@ async function uploadHandler(req, res, body) {
 
 function configHandler(req, res, body) {
   if (req.method === 'GET') {
+    /* Не отдаём секреты по сети: apiKey скрываем, только флаг «задан ли». */
+    const ai = Object.assign({}, config.ai || {});
+    const hasKey = Boolean(ai.apiKey);
+    delete ai.apiKey;
     return json(res, 200, {
       port: config.port,
       cityName: config.cityName,
-      ai: config.ai
+      ai: ai,
+      hasApiKey: hasKey
     });
   }
   const ai = body && body.ai;
@@ -1011,7 +1016,8 @@ function configHandler(req, res, body) {
     if (typeof ai.opencodeBin === 'string') config.ai.opencodeBin = ai.opencodeBin;
     if (typeof ai.projectsDir === 'string') { config.ai.projectsDir = ai.projectsDir; aiProjectsDir = null; }
     if (typeof ai.baseUrl === 'string') config.ai.baseUrl = ai.baseUrl;
-    if (typeof ai.apiKey === 'string') config.ai.apiKey = ai.apiKey;
+    /* Пустое поле = «не менять», чтобы форма без введённого ключа не стирала сохранённый. */
+    if (typeof ai.apiKey === 'string' && ai.apiKey.trim() !== '') config.ai.apiKey = ai.apiKey.trim();
     if (typeof ai.model === 'string') config.ai.model = ai.model;
     if (typeof ai.systemPrompt === 'string') config.ai.systemPrompt = ai.systemPrompt;
     saveConfig();

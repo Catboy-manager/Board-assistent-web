@@ -717,7 +717,11 @@ window.APP = {
       const mode = document.getElementById('ai-mode-in');
       if (mode) mode.value = (c.ai && c.ai.mode) || 'cli';
       set('ai-base', c.ai && c.ai.baseUrl);
-      set('ai-apikey', c.ai && c.ai.apiKey);
+      set('ai-apikey', '');
+      if (c.hasApiKey) {
+        const k = document.getElementById('ai-apikey');
+        if (k) k.placeholder = '••••••  (ключ сохранён — оставьте пустым, чтобы не менять)';
+      }
       set('ai-bin', c.ai && c.ai.opencodeBin);
       set('ai-projects', c.ai && c.ai.projectsDir);
       set('ai-model-in', c.ai && c.ai.model);
