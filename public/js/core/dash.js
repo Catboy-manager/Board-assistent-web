@@ -5,8 +5,49 @@
 (function () {
   const COLLAPSE_KEY = 'nb-collapsed';
   const VIEW_KEY = 'nb-view';
+  const PANELS_KEY = 'nb-hidden-panels';
   const $ = id => document.getElementById(id);
   const esc = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
+  const PANELS = [
+    { key: 'tasks', label: '✅ Задачи', sel: '[data-card="tasks"]' },
+    { key: 'ai', label: '🤖 Big Pickle', sel: '[data-card="ai"]' },
+    { key: 'movies', label: '🎬 Что посмотреть', sel: '[data-card="movies"]' },
+    { key: 'news', label: '🗞 Новости', sel: '[data-card="news"]' },
+    { key: 'music', label: '🎵 Музыка', sel: '[data-card="music"]' },
+    { key: 'yt', label: '▶ YouTube', sel: '#yt-panel' },
+    { key: 'games', label: '🎮 Игры', sel: '#games-panel' },
+    { key: 'smart', label: '🏠 Умный дом (WIP)', sel: '#smart-panel' },
+    { key: 'interests', label: '🧠 Интересы', sel: '#interests-panel' },
+    { key: 'ops', label: '🖥 Ops', sel: '#ops-panel' },
+    { key: 'stats', label: '📊 Сервер', sel: '#stats-panel' },
+    { key: 'sys', label: '🖥 Система', sel: '#sys-panel' },
+    { key: 'msgs', label: '🗨 Сообщения', sel: '#msgs-panel' },
+    { key: 'files', label: '📁 Файлы', sel: '[data-card="files"]' },
+    { key: 'sounds', label: '🔊 Звуки', sel: '[data-card="sounds"]' },
+    { key: 'notif', label: '🔔 Уведомления', sel: '[data-card="notif"]' }
+  ];
+
+  function getHidden() {
+    try {
+      const d = JSON.parse(localStorage.getItem(PANELS_KEY) || '[]');
+      return Array.isArray(d) ? d : [];
+    } catch (e) { return []; }
+  }
+
+  function setHidden(list) {
+    const uniq = Array.from(new Set((list || []).filter(k => PANELS.some(p => p.key === k))));
+    try { localStorage.setItem(PANELS_KEY, JSON.stringify(uniq)); } catch (e) {}
+    applyPanels(uniq);
+  }
+
+  function applyPanels(hidden) {
+    const set = new Set(hidden || getHidden());
+    PANELS.forEach(p => {
+      const el = document.querySelector(p.sel);
+      if (el) el.classList.toggle('panel-hidden', set.has(p.key));
+    });
+  }
 
   function readCollapse() {
     try { return JSON.parse(localStorage.getItem(COLLAPSE_KEY) || '{}'); } catch (e) { return {}; }
@@ -24,6 +65,15 @@
     try { localStorage.setItem(VIEW_KEY, view); } catch (e) {}
     if (view === 'board' && window.CANVAS && window.CANVAS.apply) {
       try { window.CANVAS.apply(); } catch (e) {}
+    }
+    if (view === 'course' && window.COURSE && window.COURSE.init) {
+      try { window.COURSE.init(); } catch (e) {}
+    }
+    if (view === 'sandbox' && window.SANDBOX && window.SANDBOX.init) {
+      try { window.SANDBOX.init(); } catch (e) {}
+    }
+    if (view === 'github' && window.GHVIEW && window.GHVIEW.init) {
+      try { window.GHVIEW.init(); } catch (e) {}
     }
   }
 
@@ -152,6 +202,7 @@
 
   function init() {
     initView();
+    applyPanels(getHidden());
     revealPanels();
     initCollapse();
     loadModules();
@@ -159,5 +210,6 @@
   }
 
   document.addEventListener('DOMContentLoaded', init);
+  window.PANELS = { defs: PANELS, getHidden, setHidden, apply: applyPanels };
   window.NEURO_DASH = { setView, reloadTasks: renderTasks };
 })();

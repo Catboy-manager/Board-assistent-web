@@ -528,6 +528,8 @@ window.APP = {
             <button class="tab active" data-tab="bg">🎨 Фон</button>
             <button class="tab" data-tab="ui">🧪 Интерфейс</button>
             <button class="tab" data-tab="ai">🤖 ИИ</button>
+            <button class="tab" data-tab="panels">🧩 Панели</button>
+            <button class="tab" data-tab="update">🔄 Обновления</button>
           </div>
           <div class="tab-pane active" id="pane-bg">
           <label>Фоновый цвет</label>
@@ -584,6 +586,26 @@ window.APP = {
           <button class="btn" id="ai-load-config" style="margin-top:10px">Загрузить текущие настройки</button>
           <div class="hint" id="ai-config-status"></div>
         </div>
+        <div class="tab-pane" id="pane-panels">
+          <div class="hint">Отметьте панели, которые должны быть видны на дашборде. Изменения применяются сразу и сохраняются на этом устройстве.</div>
+          <div id="panels-list" class="panels-list"></div>
+          <button class="btn" id="panels-show-all" style="margin-top:8px">Показать все</button>
+        </div>
+        <div class="tab-pane" id="pane-update">
+          <div class="upd-box">
+            <div id="upd-status" class="hint">Проверяю…</div>
+            <div id="upd-meta" class="hint"></div>
+            <div id="upd-commits" class="upd-commits"></div>
+            <label>Ключ обновления (если задан)</label>
+            <input type="password" id="upd-key" placeholder="KANBAN_UPDATE_KEY">
+            <div class="upd-actions">
+              <button class="btn" id="upd-check">⟳ Проверить</button>
+              <button class="btn primary" id="upd-apply" disabled>Обновить и перезапустить</button>
+            </div>
+            <div id="upd-log" class="upd-log"></div>
+          </div>
+          <div class="hint">Обновление выполняет <code>git pull --ff-only</code> и перезапускает сервис. Незакоммиченные изменения в отслеживаемых файлах блокируют обновление. Desktop-версия обновляется вручную.</div>
+        </div>
       </div>
       <div class="modal-foot"><button class="btn primary" data-save-settings>Сохранить</button></div>
     `);
@@ -621,6 +643,9 @@ window.APP = {
     });
 
     this.fetchAiConfig();
+    this.renderPanelSettings();
+    const updateTab = document.querySelector('.tab[data-tab="update"]');
+    if (updateTab) updateTab.addEventListener('click', () => this.initUpdateSettings(), { once: true });
 
     document.getElementById('ai-load-config').onclick = async () => { await this.fetchAiConfig(); };
     document.querySelector('[data-save-settings]').onclick = async () => {
@@ -700,6 +725,121 @@ window.APP = {
       };
     });
   },
+  renderPanelSettings() {
+    const list = document.getElementById('panels-list');
+    if (!list || !window.PANELS) return;
+    const hidden = new Set(window.PANELS.getHidden());
+    list.innerHTML = window.PANELS.defs.map(p =>
+      `<label class="panel-toggle"><input type="checkbox" data-panel="${p.key}" ${hidden.has(p.key) ? '' : 'checked'}> <span>${p.label}</span></label>`
+    ).join('');
+    const sync = () => {
+      const off = Array.from(list.querySelectorAll('input[data-panel]')).filter(x => !x.checked).map(x => x.dataset.panel);
+      window.PANELS.setHidden(off);
+    };
+    list.querySelectorAll('input[data-panel]').forEach(cb => { cb.onchange = sync; });
+    const all = document.getElementById('panels-show-all');
+    if (all) all.onclick = () => {
+      list.querySelectorAll('input[data-panel]').forEach(x => { x.checked = true; });
+      window.PANELS.setHidden([]);
+    };
+  },
+
+  initUpdateSettings() {
+    const status = document.getElementById('upd-status');
+    const meta = document.getElementById('upd-meta');
+    const commits = document.getElementById('upd-commits');
+    const apply = document.getElementById('upd-apply');
+    const check = document.getElementById('upd-check');
+    const log = document.getElementById('upd-log');
+    const keyIn = document.getElementById('upd-key');
+    if (!status || !apply || !check) return;
+    let last = null;
+    try { if (keyIn) keyIn.value = localStorage.getItem('kban-update-key') || ''; } catch (e) {}
+    const headers = () => {
+      const h = {};
+      const k = keyIn ? keyIn.value.trim() : '';
+      if (k) h['x-update-key'] = k;
+      return h;
+    };
+    if (keyIn) keyIn.onchange = () => {
+      try { localStorage.setItem('kban-update-key', keyIn.value.trim()); } catch (e) {}
+    };
+    const short = h => String(h || '').slice(0, 10);
+    const setLog = t => { if (log) log.textContent = t || ''; };
+    const render = d => {
+      last = d;
+      if (!d || !d.ok) { status.textContent = 'Ошибка: ' + ((d && d.error) || 'нет ответа'); apply.disabled = true; return; }
+      if (!d.supported) {
+        status.textContent = 'Обновления недоступны: ' + (d.reason || 'не git-репозиторий');
+        meta.textContent = '';
+        commits.innerHTML = '';
+        apply.disabled = true;
+        return;
+      }
+      const behind = d.behind || 0;
+      status.textContent = behind ? ('Доступно обновлений: ' + behind) : (d.ahead ? 'Локальные коммиты впереди' : 'Обновлений нет');
+      meta.textContent = 'Ветка ' + d.branch + ' · ' + short(d.current) + ' → ' + short(d.latest) + (d.fetchError ? ' · ' + d.fetchError : '');
+      commits.innerHTML = (d.commits || []).map(c =>
+        `<div class="upd-commit"><code>${c.hash}</code><span>${this.esc(c.subject)}</span><span class="hint">${this.esc(c.author)} · ${this.esc(c.when)}</span></div>`
+      ).join('');
+      if ((d.dirty || []).length) status.textContent += ' · есть незакоммиченные изменения';
+      apply.disabled = !(behind > 0) || (d.dirty || []).length > 0;
+    };
+    const doCheck = async (refresh) => {
+      status.textContent = 'Проверяю…';
+      setLog('');
+      try {
+        const r = await fetch('/api/update/check' + (refresh ? '' : '?refresh=0'), { headers: headers(), cache: 'no-store' });
+        const d = await r.json();
+        render(d);
+      } catch (e) {
+        status.textContent = 'Ошибка проверки: ' + String((e && e.message) || e);
+        apply.disabled = true;
+      }
+    };
+    check.onclick = () => doCheck(true);
+    apply.onclick = async () => {
+      if (!last || !last.supported) return;
+      apply.disabled = true;
+      check.disabled = true;
+      setLog('Выполняю git pull…');
+      status.textContent = 'Обновляю…';
+      try {
+        const r = await fetch('/api/update/apply', { method: 'POST', headers: headers() });
+        const d = await r.json();
+        if (!d.ok) {
+          status.textContent = 'Ошибка: ' + (d.error || 'не удалось обновить');
+          setLog(JSON.stringify(d, null, 2));
+          apply.disabled = false;
+          check.disabled = false;
+          return;
+        }
+        setLog((d.output || '') + '\n\n' + (d.restart ? 'Перезапускаю сервис…' : (d.restartNote || 'Перезапустите сервис вручную.')));
+        status.textContent = 'Обновлено, жду перезапуск…';
+        if (d.restart) {
+          let tries = 0;
+          const t = setInterval(async () => {
+            tries++;
+            try {
+              const p = await fetch('/api/ping', { cache: 'no-store' });
+              if (p.ok) { clearInterval(t); location.reload(); return; }
+            } catch (e) {}
+            if (tries > 40) { clearInterval(t); status.textContent = 'Сервис не ответил — проверьте kanban-board'; }
+          }, 1000);
+        } else {
+          check.disabled = false;
+          apply.disabled = false;
+        }
+      } catch (e) {
+        status.textContent = 'Ошибка сети: ' + String((e && e.message) || e);
+        setLog('');
+        check.disabled = false;
+        apply.disabled = false;
+      }
+    };
+    doCheck(true);
+  },
+
   async fetchAiConfig() {
     try {
       const res = await fetch('/api/config');

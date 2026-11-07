@@ -9,6 +9,9 @@
     const clear = $('cookies-clear');
     const fromBrowser = $('cookies-from-browser');
     const browserSel = $('cookies-browser');
+    const historyDevice = $('history-device');
+    const historyFile = $('history-file');
+    const historyHint = $('history-hint');
     const status = $('cookies-status');
     const preview = $('cookies-preview');
     const result = $('cookies-result');
@@ -18,10 +21,13 @@
     const logEl = $('cookies-log');
     const tagsEl = $('cookies-tags');
     const portraitEl = $('cookies-portrait');
-    let text = '';
     let pollTimer = null;
     let pollSince = 0;
     let pollTicks = 0;
+
+    function setHistoryHint(text) {
+      if (historyHint) historyHint.textContent = text || '';
+    }
 
     function esc(s) {
       return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -79,7 +85,7 @@
       const cats = (d.cats || []).filter(c => c.count > 0);
       const themes = (d.themes || []).filter(t => t.count > 0);
       const all = cats.concat(themes);
-      if (!all.length) { result.innerHTML = '<div class="hint">Сигналов не найдено — попробуйте другой браузер или загрузите cookies.txt.</div>'; return; }
+      if (!all.length) { result.innerHTML = '<div class="hint">Сигналов не найдено — откройте браузер и посмотрите пару роликов на YouTube или что-нибудь найдите в Google/Яндекс, затем повторите импорт.</div>'; return; }
       const rows = all.map(c =>
         '<div style="display:flex;align-items:center;gap:8px"><span>' + esc(c.icon) + '</span>' +
         '<b style="min-width:150px">' + esc(c.label) + (c.auto ? ' <span class="hint">(авто)</span>' : '') + '</b>' +
@@ -164,17 +170,16 @@
       }
     }
 
-    async function fallbackRebuild(payload) {
+    async function fallbackRebuild() {
       stopStream();
       setProgress(100, 'Завершаю…');
       try {
-        const body = (payload && typeof payload.text === 'string') ? payload.text : '';
         const r = await fetch('/api/interests/rebuild-from-cookies', {
-          method: 'POST', headers: { 'Content-Type': 'text/plain' }, body
+          method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: ''
         });
         const d = await r.json().catch(() => ({}));
         if (r.ok) {
-          status.textContent = 'Готово: доменов ' + (d.domains || 0) + ', сигналов ' + (d.updates || 0);
+          status.textContent = 'Карта пересчитана по текущим данным';
           if (d.portrait) renderPortrait(d.portrait);
         } else {
           status.textContent = 'Ошибка: ' + (d.error || r.status);
@@ -184,6 +189,109 @@
       }
       await reloadInterests();
       if (window.INT && window.INT.load) window.INT.load();
+    }
+
+    function parseHistoryFile(text, name) {
+      const rows = [];
+      const seen = new Set();
+      const add = (url, title) => {
+        const u = String(url || '').trim();
+        if (!/^https?:\/\//i.test(u) || seen.has(u)) return;
+        seen.add(u);
+        rows.push({ url: u, title: String(title || '').trim().slice(0, 300) });
+      };
+      const raw = String(text || '');
+      if (/\.json$/i.test(name) || /^\s*[\[{]/.test(raw)) {
+        try {
+          const d = JSON.parse(raw);
+          const arr = Array.isArray(d) ? d : (Array.isArray(d.rows) ? d.rows : Array.isArray(d.history) ? d.history : Array.isArray(d.urls) ? d.urls : []);
+          for (const x of arr) {
+            if (typeof x === 'string') add(x, '');
+            else if (x && typeof x === 'object') add(x.url || x.href || x.link || x.uri, x.title || x.name || '');
+          }
+        } catch (e) {}
+      } else if (/\.html?$/i.test(name) || /<a\s/i.test(raw)) {
+        try {
+          const doc = new DOMParser().parseFromString(raw, 'text/html');
+          doc.querySelectorAll('a[href]').forEach(a => add(a.getAttribute('href'), a.textContent || ''));
+        } catch (e) {}
+      } else {
+        for (const line of raw.split(/\r?\n/)) {
+          const t = line.trim();
+          if (!t) continue;
+          const tab = t.indexOf('\t');
+          if (tab >= 0) add(t.slice(0, tab), t.slice(tab + 1));
+          else {
+            const m = t.match(/https?:\/\/\S+/);
+            if (m) add(m[0], t.replace(m[0], '').trim());
+          }
+        }
+      }
+      return rows;
+    }
+
+    async function sendRows(rows, source) {
+      resetUi();
+      stopStream();
+      if (!rows || !rows.length) {
+        setProgress(100, 'Нет данных');
+        status.textContent = 'В истории не найдено ссылок на поиск или YouTube';
+        return;
+      }
+      setProgress(10, 'Ссылок: ' + rows.length + ' · отправляю…');
+      log('История с устройства: ' + rows.length + ' строк');
+      try {
+        const r = await fetch('/api/interests/apply-rows', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ rows, source })
+        });
+        const d = await r.json().catch(() => ({}));
+        if (!r.ok) {
+          setProgress(100, 'Ошибка');
+          status.textContent = 'Ошибка: ' + (d.error || r.status);
+          log('✖ ' + (d.error || ('HTTP ' + r.status)), 'err');
+          return;
+        }
+        setProgress(100, 'Готово');
+        status.textContent = 'Готово: строк ' + (d.count || rows.length) + ', сигналов ' + (d.updates || 0) +
+          ' (поиск ' + (d.searches || 0) + ', видео ' + (d.videos || 0) + ')';
+        log('✔ История обработана: ' + (d.updates || 0) + ' сигналов', 'ok');
+        if (d.portrait) renderPortrait(d.portrait);
+        await reloadInterests();
+        if (window.INT && window.INT.load) window.INT.load();
+      } catch (e) {
+        setProgress(100, 'Ошибка');
+        status.textContent = 'Ошибка сети: ' + String((e && e.message) || e);
+        log('✖ ' + String((e && e.message) || e), 'err');
+      }
+    }
+
+    async function collectDeviceHistory() {
+      if (window.KANBAN_LOCAL && typeof window.KANBAN_LOCAL.collectHistory === 'function') {
+        setHistoryHint('Читаю историю локальных браузеров на этом устройстве…');
+        resetUi();
+        setProgress(5, 'Читаю локальные браузеры…');
+        try {
+          const d = await window.KANBAN_LOCAL.collectHistory();
+          if (!d || !d.ok) {
+            setProgress(100, 'Ошибка');
+            status.textContent = 'Не удалось прочитать историю: ' + ((d && d.error) || 'нет данных');
+            setHistoryHint('Можно выбрать файл экспорта истории вручную.');
+            return;
+          }
+          const rows = (d.rows || []).map(x => typeof x === 'string' ? { url: x, title: '' } : x);
+          setHistoryHint('Источники: ' + ((d.sources || []).join(', ') || 'локальные браузеры') + ' · строк: ' + rows.length);
+          await sendRows(rows, 'device');
+        } catch (e) {
+          setProgress(100, 'Ошибка');
+          status.textContent = 'Ошибка чтения истории: ' + String((e && e.message) || e);
+          setHistoryHint('Можно выбрать файл экспорта истории вручную.');
+        }
+        return;
+      }
+      setHistoryHint('Веб-версия не имеет доступа к истории браузера. Выберите экспорт истории (.txt/.json/.html) или откройте desktop-приложение.');
+      if (historyFile) historyFile.click();
     }
 
     async function startImport(payload) {
@@ -226,7 +334,7 @@
       if (d && d.ok === false) {
         stopStream();
         log('Задача импорта не найдена — обновляю напрямую…', 'err');
-        fallbackRebuild({});
+        fallbackRebuild();
         return;
       }
       pollTicks++;
@@ -240,24 +348,31 @@
       }
     }
 
+    if (historyDevice) historyDevice.addEventListener('click', collectDeviceHistory);
+
+    if (historyFile) historyFile.addEventListener('change', async () => {
+      const f = historyFile.files && historyFile.files[0];
+      if (!f) return;
+      try {
+        const text = await f.text();
+        const rows = parseHistoryFile(text, f.name);
+        await sendRows(rows, 'device-file');
+      } catch (e) {
+        status.textContent = 'Не удалось прочитать файл: ' + String((e && e.message) || e);
+      }
+      historyFile.value = '';
+    });
+
+    setHistoryHint(window.KANBAN_LOCAL
+      ? 'Desktop: история читается с этого устройства автоматически, файл не нужен.'
+      : 'Веб: выберите файл экспорта истории (.txt/.json/.html). В Chrome/Edge можно использовать расширение History Export, в Firefox — экспорт JSON/HTML.');
+
     if (fromBrowser) fromBrowser.addEventListener('click', () => {
       const b = browserSel ? browserSel.value : '';
       startImport({ browser: b });
     });
 
-    if (file) file.addEventListener('change', async (e) => {
-      const f = e.target.files[0];
-      if (!f) return;
-      text = await f.text();
-      if (preview) {
-        preview.style.display = '';
-        preview.textContent = text.length > 8000 ? text.slice(0, 8000) + '\n... (обрезано для предпросмотра)' : text;
-      }
-      status.textContent = 'Файл загружен: ' + f.name + ' (' + Math.round(text.length / 1024) + ' КБ). Нажмите «Проанализировать».';
-    });
-
     if (clear) clear.addEventListener('click', () => {
-      text = '';
       stopStream();
       if (file) file.value = '';
       if (preview) { preview.textContent = ''; preview.style.display = 'none'; }
@@ -270,8 +385,7 @@
     });
 
     if (analyze) analyze.addEventListener('click', () => {
-      if (text.trim()) startImport({ text });
-      else startImport({});
+      fallbackRebuild();
     });
 
     reloadInterests();

@@ -65,6 +65,7 @@
   }
 
   const SHELL = `
+    <div class="sm-wip"><b>WIP</b> Раздел в разработке: управление устройствами может быть нестабильным.</div>
     <div class="sm-bar">
       <button class="btn mini" id="sm-scan" title="Опросить локальную сеть на предмет устройств">🔍 Скан LAN</button>
       <label class="sm-check" title="Автоматически опрашивать устройства"><input type="checkbox" id="sm-poll"> опрос</label>

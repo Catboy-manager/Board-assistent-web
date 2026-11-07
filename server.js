@@ -45,9 +45,12 @@ const sounds = require('./sounds')({ dataDir: DATA_DIR, json, uploadsDir: UPLOAD
 const notify = require('./notify')({ dataDir: DATA_DIR, json });
 const messages = require('./messages')({ json, notify });
 const ops = require('./ops')({ dataDir: DATA_DIR, json });
-const gh = require('./gh')({ dataDir: DATA_DIR, json });
+const gh = require('./gh')({ dataDir: DATA_DIR, json, root: ROOT, projectsDir: () => getProjectsDir(), cfg: () => config });
 const youtube = require('./youtube')({ dataDir: DATA_DIR, json });
 const smart = require('./smart')({ dataDir: DATA_DIR, readBody, json, cfg: () => config });
+const course = require('./course')({ root: ROOT, json });
+const sandbox = require('./sandbox')({ json, readBody });
+const updater = require('./updater')({ root: ROOT, json, readBody, dataDir: DATA_DIR, cfg: () => config });
 
 const consoleAuth = { key: '' };
 const consoleMod = require('./console')({
@@ -1003,11 +1006,19 @@ function configHandler(req, res, body) {
     const ai = Object.assign({}, config.ai || {});
     const hasKey = Boolean(ai.apiKey);
     delete ai.apiKey;
+    const github = config.github || {};
     return json(res, 200, {
       port: config.port,
       cityName: config.cityName,
       ai: ai,
-      hasApiKey: hasKey
+      hasApiKey: hasKey,
+      github: {
+        owner: String(github.owner || process.env.KANBAN_GH_OWNER || 'Catboy-manager'),
+        hasToken: Boolean(github.token || process.env.GITHUB_TOKEN)
+      },
+      update: {
+        keyRequired: Boolean(process.env.KANBAN_UPDATE_KEY || config.updateKey)
+      }
     });
   }
   const ai = body && body.ai;
@@ -1127,6 +1138,9 @@ async function handleRequest(req, res) {
       if (p.startsWith('/api/yt')) { if (await youtube.handle(p, url, req, res)) return; }
       if (p.startsWith('/api/interests')) { if (await youtube.interestsHandle(p, url, req, res)) return; }
       if (p.startsWith('/api/smart')) { if (await smart.handle(p, url, req, res)) return; }
+      if (p.startsWith('/api/course')) { if (await course.handle(p, url, req, res)) return; }
+      if (p.startsWith('/api/sandbox')) { if (await sandbox.handle(p, url, req, res)) return; }
+      if (p.startsWith('/api/update')) { if (await updater.handle(p, url, req, res)) return; }
       if (p.startsWith('/api/console')) { if (await consoleMod.handle(p, url, req, res)) return; }
       if (req.method === 'GET' && p === '/api/ping') return json(res, 200, { ok: true });
       if (req.method === 'GET' && p === '/api/files') return filesListHandler(req, res, url);

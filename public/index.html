@@ -15,7 +15,7 @@
   <link rel="stylesheet" href="/css/themes.css">
   <link rel="stylesheet" href="/css/layout.css">
   <link rel="stylesheet" href="/css/components.css">
-  <link rel="stylesheet" href="/css/dash.css?v=1">
+  <link rel="stylesheet" href="/css/dash.css?v=2">
 </head>
 <body data-view="dash">
   <div id="bg" aria-hidden="true"></div>
@@ -32,7 +32,11 @@
     <nav id="view-switch">
       <button class="vs-btn active" data-view="dash">🗂<span class="vs-label"> Дашборд</span></button>
       <button class="vs-btn" data-view="board">📋<span class="vs-label"> Канбан</span></button>
-      <button class="vs-btn" data-view="cookies">🍪<span class="vs-label"> Cookies → Интересы</span></button>    </nav>
+      <button class="vs-btn" data-view="cookies">🎯<span class="vs-label"> Интересы</span></button>
+      <button class="vs-btn" data-view="course">📚<span class="vs-label"> Курс</span></button>
+      <button class="vs-btn" data-view="sandbox">🧪<span class="vs-label"> Песочница</span></button>
+      <button class="vs-btn" data-view="github">🐙<span class="vs-label"> GitHub</span></button>
+    </nav>
 
     <div id="weather" class="weather">
       <div class="we-now">
@@ -116,7 +120,7 @@
 
       <section class="side-panel smart-panel" id="smart-panel">
         <div class="sp-head">
-          <h2>🏠 Умный дом <span class="sp-sub">устройства и сценарии</span></h2>
+          <h2>🏠 Умный дом <span class="sp-sub">устройства и сценарии</span> <span class="wip-badge">WIP</span></h2>
         </div>
         <div id="sp-smart" class="sp-pane active"></div>
       </section>
@@ -204,23 +208,30 @@
     </aside>
   </div>
 
-  <!-- ================= COOKIES → ИНТЕРЕСЫ ================= -->
+  <!-- ================= ИСТОРИЯ → ИНТЕРЕСЫ ================= -->
   <div id="cookies-view" style="padding:84px 18px 24px;max-width:1100px;margin:0 auto;">
     <section class="dash-card" style="max-height:none;min-height:400px;">
-      <div class="dash-card-head"><h2>🍪 Импорт cookies и истории браузера → карта интересов</h2></div>
+      <div class="dash-card-head"><h2>🎯 Импорт истории браузера → карта интересов</h2></div>
       <div class="dash-card-body">
-        <div class="hint">Подтягивает данные напрямую из Chrome/Chromium/Firefox/Brave/Edge (Linux/macOS/Windows) — <b>cookies и историю посещений</b> (история меняется каждый день, поэтому обновляйте импорт регулярно). Либо загрузите cookies.txt вручную. Импорт строит карту интересов и ваш портрет.</div>
+        <div class="hint">Интересы строятся <b>только из реальных данных</b>: поисковых запросов (Google, Яндекс, Bing, DuckDuckGo) и просмотренного на YouTube. История берётся <b>с этого устройства</b>: в desktop-приложении — автоматически из локальных браузеров, в веб-версии — из экспортированного файла (.txt/.json/.html). Cookies для интересов не используются; они остаются только для доступа yt-dlp к видео.</div>
         <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
-          <select id="cookies-browser" style="width:auto;min-width:130px;">
-            <option value="">Авто (все браузеры)</option>
-            <option value="firefox">Firefox</option>
-            <option value="chrome">Chrome / Chromium</option>
-          </select>
-          <button class="btn" id="cookies-from-browser">🌐 Взять cookies из браузера</button>
-          <label class="btn" style="cursor:pointer;">📄 Загрузить cookies.txt <input type="file" id="cookies-file" accept=".txt,text/plain" style="display:none"></label>
-          <button class="btn" id="cookies-analyze">🔍 Проанализировать и обновить интересы</button>
+          <button class="btn primary" id="history-device">📥 История с этого устройства</button>
+          <input type="file" id="history-file" accept=".txt,.json,.html,.htm,text/plain,application/json,text/html" hidden>
+          <button class="btn" id="cookies-analyze">🔍 Пересчитать интересы</button>
           <button class="btn" id="cookies-clear">🧹 Очистить</button>
         </div>
+        <div class="hint" id="history-hint"></div>
+        <details class="history-server">
+          <summary>Импорт с сервера (фолбэк, если клиент не может)</summary>
+          <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:8px;">
+            <select id="cookies-browser" style="width:auto;min-width:130px;">
+              <option value="">Авто (все браузеры)</option>
+              <option value="firefox">Firefox</option>
+              <option value="chrome">Chrome / Chromium</option>
+            </select>
+            <button class="btn" id="cookies-from-browser">🌐 Импортировать историю из браузера на сервере</button>
+          </div>
+        </details>
 
         <div id="cookies-progress-wrap" class="cookies-progress-wrap" hidden>
           <div class="cookies-progress"><div class="cookies-progress-fill" id="cookies-progress-fill" style="width:0%"></div></div>
@@ -235,6 +246,89 @@
         <div id="cookies-result" style="display:flex;flex-direction:column;gap:8px"></div>
       </div>
     </section>
+  </div>
+
+  <!-- ================= КУРС ================= -->
+  <div id="course-view">
+    <aside id="course-toc">
+      <div class="course-toc-head">
+        <h2>📚 Курс</h2>
+        <input id="course-search" type="text" placeholder="Поиск по главам…">
+      </div>
+      <nav id="course-toc-list" class="course-toc-list"></nav>
+    </aside>
+    <main id="course-main">
+      <div id="course-progress" class="course-progress"><div id="course-progress-fill"></div></div>
+      <article id="course-content" class="course-content"></article>
+      <div id="course-nav" class="course-nav">
+        <button class="btn" id="course-prev">← Назад</button>
+        <span id="course-pos" class="course-pos"></span>
+        <button class="btn" id="course-next">Вперёд →</button>
+      </div>
+    </main>
+  </div>
+
+  <!-- ================= ПЕСОЧНИЦА ================= -->
+  <div id="sandbox-view">
+    <div class="sb-wrap">
+      <div class="sb-head">
+        <div>
+          <h2>🧪 Песочница</h2>
+          <div class="sb-sub">Python · Node.js · Bash · таймаут и изоляция bwrap</div>
+        </div>
+        <span id="sb-badge" class="sb-badge">проверяю окружение…</span>
+      </div>
+      <div class="sb-toolbar">
+        <select id="sb-lang">
+          <option value="python">Python</option>
+          <option value="node">Node.js</option>
+          <option value="bash">Bash</option>
+        </select>
+        <select id="sb-timeout">
+          <option value="3000">3 с</option>
+          <option value="10000" selected>10 с</option>
+          <option value="30000">30 с</option>
+        </select>
+        <button id="sb-run" class="btn primary">▶ Запустить</button>
+        <button id="sb-clear" class="btn">Очистить</button>
+        <button id="sb-example" class="btn">Пример</button>
+        <label class="sb-check"><input type="checkbox" id="sb-stdin-toggle"> stdin</label>
+        <span class="sb-hint">Ctrl+Enter</span>
+      </div>
+      <textarea id="sb-code" spellcheck="false" placeholder="Напишите код и нажмите «Запустить»…"></textarea>
+      <textarea id="sb-stdin" class="sb-stdin hidden" placeholder="stdin (необязательно)"></textarea>
+      <div class="sb-out-head">
+        <span>Вывод</span>
+        <span id="sb-status" class="sb-status"></span>
+        <button id="sb-copy" class="btn mini">Копировать</button>
+      </div>
+      <pre id="sb-out" class="sb-out"></pre>
+    </div>
+  </div>
+
+  <!-- ================= GITHUB ================= -->
+  <div id="github-view">
+    <div class="ghv-wrap">
+      <div class="ghv-head">
+        <div>
+          <h2>🐙 GitHub</h2>
+          <div class="ghv-sub" id="ghv-sub">Репозитории и локальные проекты</div>
+        </div>
+        <div class="ghv-actions">
+          <input id="ghv-search" type="search" placeholder="Поиск по названию…">
+          <select id="ghv-sort">
+            <option value="pushed">По обновлению</option>
+            <option value="stars">По звёздам</option>
+            <option value="name">По имени</option>
+          </select>
+          <button id="ghv-refresh" class="btn">⟳ Обновить</button>
+        </div>
+      </div>
+      <div id="ghv-meta" class="ghv-meta"></div>
+      <div id="ghv-repos" class="ghv-grid"></div>
+      <h3 class="ghv-h3">🗂 Локальные проекты</h3>
+      <div id="ghv-local" class="ghv-local"></div>
+    </div>
   </div>
 
   <!-- ================= КАНБАН (доска) ================= -->
@@ -304,6 +398,9 @@
   <script src="/js/components/sounds-ui.js"></script>
   <script src="/js/core/bg-shader.js?v=1"></script>
   <script src="/js/components/cookies.js?v=1"></script>
+  <script src="/js/components/course.js?v=1"></script>
+  <script src="/js/components/sandbox.js?v=1"></script>
+  <script src="/js/components/github-view.js?v=1"></script>
   <script src="/js/core/dash.js?v=1"></script>
 </body>
 </html>

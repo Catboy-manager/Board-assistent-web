@@ -13,3 +13,14 @@ tts/
 *.bak
 *.bak.*
 *.replaybak
+.env
+.env.*
+*.pem
+*.key
+*.p12
+*.pfx
+secrets.json
+yt-cookies.txt
+cookies.sqlite
+History
+places.sqlite
