@@ -9,7 +9,14 @@
   const RATING_EMOJI = ['😞', '🙁', '😐', '🙂', '🤩'];
   const RATING_LABEL = { '-2': 'совсем не интересно', '-1': 'не интересно', '0': 'нейтрально', '1': 'интересно', '2': 'крайне заинтересован' };
   const WEIGHT_ICON = w => (w >= 1.5 ? '🔥' : w >= 0.5 ? '⚡' : w >= 0 ? '·' : '💤');
-  const SRC_BADGE = it => (it.gov ? '🏛 ' : '') + (it.loc === 'intl' ? '🌐 ' : '');
+  const fmtViews = n => {
+    n = Number(n) || 0;
+    if (n >= 1000000) return (n / 1000000).toFixed(1).replace('.0', '') + 'M';
+    if (n >= 1000) return (n / 1000).toFixed(1).replace('.0', '') + 'K';
+    return String(n);
+  };
+  const SRC_BADGE = it => (it.hot ? '🔥 ' : '') + (it.kind === 'telegram' ? 'TG ' : it.kind === 'vk' ? 'VK ' : '') + (it.gov ? '🏛 ' : '') + (it.loc === 'intl' ? '🌐 ' : '');
+  const SRC_TITLE = it => it.hot ? 'горячая новость из открытого канала' : it.kind === 'telegram' ? 'Telegram-канал' : it.kind === 'vk' ? 'VK-сообщество' : it.gov ? 'государственное СМИ' : it.loc === 'intl' ? 'зарубежный источник' : 'российский источник';
 
   async function load() {
     const box = $('sw-news');
@@ -42,7 +49,7 @@
     }).join('');
 
     const srcRows = (data.sources || []).map(s => `
-      <label class="nw-src-pref" title="${s.gov ? 'государственное СМИ' : ''}">${SRC_BADGE({ gov: s.gov, loc: s.loc })}${esc(s.name)}
+      <label class="nw-src-pref" title="${SRC_TITLE({ gov: s.gov, loc: s.loc, kind: s.kind, hot: false })}">${SRC_BADGE({ gov: s.gov, loc: s.loc, kind: s.kind, hot: s.social })}${esc(s.name)}
         <input type="checkbox" data-src="${s.id}" ${s.enabled ? 'checked' : ''}></label>`).join('');
 
     window.APP.openModal(`
@@ -51,7 +58,7 @@
         <div class="nw-prefs-title">Категории</div>
         <div class="nw-prefs">${catRows}</div>
         <div class="hint">Веса влияют на наполнение отделов. Отдельные новости оцениваются прямо в списке (😞…🤩) — система дообучается на твоих словах.</div>
-        <div class="nw-prefs-title">Источники <span class="nw-legend">${SRC_BADGE({ gov: true, loc: '' })}госСМИ · ${SRC_BADGE({ gov: false, loc: 'intl' })}зарубежные</span></div>
+        <div class="nw-prefs-title">Источники <span class="nw-legend">${SRC_BADGE({ gov: true, loc: '' })}госСМИ · ${SRC_BADGE({ gov: false, loc: 'intl' })}зарубежные · 🔥 открытые каналы · TG/VK соцсети</span></div>
         <div class="nw-srcs">${srcRows}</div>
         <button class="btn primary block" id="nw-pref-save">Сохранить</button></div>`);
     $('nw-pref-save').onclick = async () => {
@@ -139,9 +146,10 @@
       return `<button class="nr${sel}${act}" data-v="${v}" title="${RATING_LABEL[v]}">${RATING_EMOJI[v + 2]}</button>`;
     }).join('');
     const badges = SRC_BADGE(it);
+    const meta = [it.views ? '👁 ' + fmtViews(it.views) : '', it.forwards ? '↗ ' + fmtViews(it.forwards) : ''].filter(Boolean).join(' ');
     return `<div class="nw-item" data-id="${it.id}">
       <a class="nw-link" target="_blank" rel="noopener" href="${esc(it.link)}" title="${esc(it.source)}">${esc(it.title)}</a>
-      <span class="nw-src" title="${it.gov ? 'государственное СМИ' : it.loc === 'intl' ? 'зарубежный источник' : 'российский источник'}">${badges}${esc(it.source || '')}</span>
+      <span class="nw-src" title="${SRC_TITLE(it)}">${badges}${esc(it.source || '')}${meta ? ' · ' + meta : ''}</span>
       <div class="nw-rate">${stars}</div>
     </div>`;
   }
